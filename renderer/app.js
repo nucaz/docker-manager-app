@@ -506,6 +506,37 @@ function filterByProject(proj) {
   renderContainers();
 }
 
+// Run docker compose action for all containers of a project
+async function composeProjectAction(project, action) {
+  // Find working directory from any container in this project
+  var cont = state.containers.find(function(c) { return c.composeProject === project && c.composeWorkDir; });
+  var workDir = cont && cont.composeWorkDir;
+  if (!workDir) {
+    showToast('No se encontró el directorio del proyecto. ¿Fue iniciado con docker compose?', 'warn', 6000);
+    return;
+  }
+  var actionLabel = { up:'Iniciando', stop:'Deteniendo', restart:'Reiniciando' }[action] || action;
+  showToast(actionLabel + ' proyecto ' + project + '…', 'info', 3000);
+  showConsole('pack');
+  clearConsole('pack-output');
+  appendConsole('pack-output', 'docker compose ' + action + (action==='up'?' -d':'') + '\nProyecto: ' + project + '\nDir: ' + workDir + '\n\n');
+  var sid = 'compose-' + Date.now();
+  api.dockerComposeAction({ projectDir: workDir, action: action, build: false, streamId: sid });
+  // Register waiter for feedback
+  var p = new Promise(function(resolve) {
+    var t = setTimeout(resolve, 120000);
+    if (!window._composeWaiters) window._composeWaiters = [];
+    window._composeWaiters.push(function(payload) {
+      if (payload && payload.streamId === sid) { clearTimeout(t); resolve(payload.code); }
+    });
+  });
+  var code = await p;
+  if (code === 0) { showToast('✓ ' + project + ' ' + actionLabel.toLowerCase(), 'success', 3000); }
+  else            { showToast('✗ Error en compose ' + action + ' — revisa el log', 'error', 5000); }
+  setTimeout(refreshContainerData, 1500);
+}
+
+
 function updateBadges() {
   const running = state.containers.filter(c => c.State === 'running').length;
   $id('badge-running').textContent = running;
@@ -516,25 +547,116 @@ function updateBadges() {
 // ACCIONES DE CONTENEDOR
 // ═══════════════════════════════════════════════════════════════════════════════
 async function containerAction(id, action) {
-  const card = document.getElementById(`card-${id}`);
-  if (card) {
-    const btns = card.querySelectorAll('button');
-    btns.forEach(b => b.disabled = true);
+  const card = document.getElementById('card-' + id);
+  const btns = card ? card.querySelectorAll("button") : [];
+  btns.forEach(function(b) { b.disabled = true; });
+
+  const statusEl = card && card.querySelector('.container-status-text');
+  const prevStatus = statusEl ? statusEl.textContent : '';
+  const spinnerMap = { start: '⏳ Iniciando…', stop: '⏳ Deteniendo…', restart: '⏳ Reiniciando…' };
+  if (statusEl && spinnerMap[action]) statusEl.textContent = spinnerMap[action];
+
+  const labels = { start: 'Iniciando', stop: 'Deteniendo', restart: 'Reiniciando' };
+  showToast((labels[action] || action) + '…', 'info', 3000);
+
+  // For compose-managed containers: route start/stop/restart through docker compose
+  // docker stop alone won't work if restart:always is set — compose stop respects intent
+  const cont = state.containers.find(function(c) { return c.ID === id; });
+  const workDir = cont && (cont.composeWorkDir || '');
+  const service = cont && (cont.composeService || '');
+  const isCompose = !!(workDir && service);
+
+  if (isCompose && (action === 'start' || action === 'stop' || action === 'restart')) {
+    var composeAction = action === 'start' ? 'up' : action; // up|stop|restart
+    await _composeStreamAction(workDir, service, composeAction);
+    if (statusEl) statusEl.textContent = prevStatus;
+    btns.forEach(function(b) { b.disabled = false; });
+    await new Promise(function(r) { setTimeout(r, 1200); });
+    await refreshContainerData();
+    // After start: verify container stayed up
+    if (action === 'start') {
+      var updated = state.containers.find(function(c) { return c.ID === id; });
+      if (!updated || updated.State !== 'running') {
+        showToast('⚠ El contenedor se detuvo. Abriendo logs…', 'warn', 6000);
+        var sel = document.getElementById('log-select');
+        if (sel) {
+          var opt = Array.from(sel.options).find(function(o) { return o.value === id; });
+          if (opt) { sel.value = id; switchLogSource('docker'); showTab('logs'); loadLogs(); }
+        }
+      } else {
+        showToast('✓ Contenedor iniciado', 'success', 3000);
+      }
+    } else {
+      showToast('✓ ' + (labels[action] || action) + ' completado', 'success', 2000);
+    }
+    return;
   }
 
-  const labels = { start:'Iniciando', stop:'Deteniendo', restart:'Reiniciando' };
-  showToast(`${labels[action] || action}…`, 'info');
-
+  // Non-compose container: use docker start/stop/restart directly
   const res = await api.containerAction(id, action);
 
-  if (res.ok) {
-    showToast(`✓ ${action} exitoso`, 'success');
-    setTimeout(() => refreshContainerData(), 1200);
-  } else {
-    showToast(`Error: ${res.error}`, 'error');
-    if (card) card.querySelectorAll('button').forEach(b => b.disabled = false);
+  if (!res.ok) {
+    showToast('Error: ' + res.error, 'error', 8000);
+    if (statusEl) statusEl.textContent = prevStatus;
+    btns.forEach(function(b) { b.disabled = false; });
+    return;
   }
+
+  if (action === 'start') {
+    // Poll: verify container stayed up
+    var stayedUp = false;
+    var delays = [800, 1200, 2000];
+    for (var di = 0; di < delays.length; di++) {
+      await new Promise(function(r) { setTimeout(r, delays[di]); });
+      await refreshContainerData();
+      var updated2 = state.containers.find(function(c) { return c.ID === id; });
+      if (updated2 && updated2.State === 'running') { stayedUp = true; break; }
+      if (updated2 && (updated2.State === 'exited' || updated2.State === 'dead')) break;
+    }
+    if (!stayedUp) {
+      showToast('⚠ El contenedor se detuvo. Abriendo logs…', 'warn', 6000);
+      var sel2 = document.getElementById('log-select');
+      if (sel2) {
+        var opt2 = Array.from(sel2.options).find(function(o) { return o.value === id; });
+        if (opt2) { sel2.value = id; switchLogSource('docker'); showTab('logs'); loadLogs(); }
+      }
+    } else {
+      showToast('✓ Contenedor iniciado', 'success', 3000);
+    }
+  } else {
+    showToast('✓ ' + (labels[action] || action) + ' completado', 'success', 2000);
+    setTimeout(function() { refreshContainerData(); }, 1000);
+  }
+  btns.forEach(function(b) { b.disabled = false; });
 }
+
+// Run any docker compose action for a single service with streaming output
+// composeAction: 'up' | 'stop' | 'restart'
+async function _composeStreamAction(workDir, service, composeAction) {
+  var sid = 'compose-' + Date.now();
+  var cmdLabel = composeAction === 'up'
+    ? 'docker compose up -d ' + service
+    : 'docker compose ' + composeAction + ' ' + service;
+  showConsole('pack');
+  clearConsole('pack-output');
+  appendConsole('pack-output', cmdLabel + '\nDir: ' + workDir + '\n\n');
+  api.dockerComposeAction({ projectDir: workDir, action: composeAction, services: [service], build: false, streamId: sid });
+  // Wait for stream:end
+  await new Promise(function(resolve) {
+    var t = setTimeout(resolve, 90000);
+    function checkEnd(payload) {
+      if (payload && payload.streamId === sid) { clearTimeout(t); resolve(); }
+    }
+    if (!window._composeWaiters) window._composeWaiters = [];
+    window._composeWaiters.push(checkEnd);
+  });
+}
+
+// Legacy alias kept for composeProjectAction
+async function _composeStart(workDir, service) {
+  return _composeStreamAction(workDir, service, 'up');
+}
+
 
 async function confirmRemove(id, name) {
   if (!confirm(`¿Eliminar el contenedor "${name}"?\n\nEsto no se puede deshacer.`)) return;
@@ -942,6 +1064,11 @@ function setupStreamListeners() {
       return;
     }
     // Pack
+    // Compose up stream → show in pack console
+    if (streamId && streamId.startsWith('compose-')) {
+      appendConsole('pack-output', data);
+      return;
+    }
     if (streamId === state.packStreamId) {
       appendConsole('pack-output', data);
       return;
@@ -977,6 +1104,11 @@ function setupStreamListeners() {
   });
 
   api.onStreamEnd((payload) => {
+    // Dispatch to any _composeStart waiters
+    if (window._composeWaiters && window._composeWaiters.length) {
+      var waiters = window._composeWaiters.splice(0);
+      waiters.forEach(function(fn) { try { fn(payload); } catch(e) {} });
+    }
     const { streamId, code } = payload;
     if (streamId === state.logsStreamId) {
       state.logsStreamId = null; state.followLogs = false;

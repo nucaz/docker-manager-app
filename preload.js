@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('dockerAPI', {
   dockerScanProject:    (opts)       => ipcRenderer.invoke('docker:scanProject', opts),
   dockerStopByNames:    (opts)       => ipcRenderer.invoke('docker:stopByNames', opts),
   dockerBuildBundle:    (opts)       => ipcRenderer.send('docker:buildBundle', opts),
+  dockerComposeAction: (opts) => ipcRenderer.send('docker:composeAction', opts),
+  dockerGetComposeInfo: (opts) => ipcRenderer.invoke('docker:getComposeInfo', opts),
   pruneSystem:         (what)       => ipcRenderer.invoke('docker:pruneSystem', what),
   removeImage:         (id)         => ipcRenderer.invoke('docker:removeImage', id),
   removeVolume:        (name)       => ipcRenderer.invoke('docker:removeVolume', name),

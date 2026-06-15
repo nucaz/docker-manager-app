@@ -229,8 +229,9 @@ ipcMain.handle('docker:getContainers', async () => {
       const labels = parseLabels(c.Labels || '');
       return {
         ...c,
-        composeProject: labels['com.docker.compose.project'] || '',
-        composeService: labels['com.docker.compose.service'] || '',
+        composeProject:  labels['com.docker.compose.project']             || '',
+        composeService:  labels['com.docker.compose.service']             || '',
+        composeWorkDir:  labels['com.docker.compose.project.working_dir'] || '',
       };
     });
     return { ok: true, data: containers };
@@ -891,6 +892,94 @@ Write-Host "=== ✓ Desplegado en puerto $Port ==="
   })();
 });
 
+
+// ── Docker Compose actions (streaming) ───────────────────────────────────────
+ipcMain.on('docker:composeAction', (event, { projectDir, action, services, build, streamId }) => {
+  if (!isValidStreamId(streamId)) return;
+  const send = data => {
+    try { if (!event.sender.isDestroyed()) event.sender.send('stream:data', { streamId, data }); } catch {}
+  };
+  const done = code => {
+    try { if (!event.sender.isDestroyed()) event.sender.send('stream:end', { streamId, code }); } catch {}
+  };
+
+  try {
+    const safeDir = sanitizeArg(projectDir || '', 1024, true);
+    if (!safeDir || !fs.existsSync(safeDir)) {
+      send('Error: Directorio del proyecto no encontrado: ' + safeDir + '\n');
+      done(1); return;
+    }
+
+    // Build docker compose args
+    const composeArgs = ['compose'];
+    if (action === 'up') {
+      composeArgs.push('up', '-d');
+      if (build) composeArgs.push('--build');
+      if (Array.isArray(services) && services.length) composeArgs.push(...services.map(s => sanitizeArg(s, 128)));
+    } else if (action === 'down') {
+      composeArgs.push('down');
+      if (Array.isArray(services) && services.length) {
+        // 'down' doesn't accept service names, use 'stop' instead
+        composeArgs.splice(1, 1, 'stop');
+        composeArgs.push(...services.map(s => sanitizeArg(s, 128)));
+      }
+    } else if (action === 'restart') {
+      composeArgs.push('restart');
+      if (Array.isArray(services) && services.length) composeArgs.push(...services.map(s => sanitizeArg(s, 128)));
+    } else if (action === 'stop') {
+      composeArgs.push('stop');
+      if (Array.isArray(services) && services.length) composeArgs.push(...services.map(s => sanitizeArg(s, 128)));
+    } else if (action === 'pull') {
+      composeArgs.push('pull');
+    } else if (action === 'logs') {
+      composeArgs.push('logs', '--tail=100');
+      if (Array.isArray(services) && services.length) composeArgs.push(...services.map(s => sanitizeArg(s, 128)));
+    } else {
+      send('Acción no válida: ' + action + '\n'); done(1); return;
+    }
+
+    send('▶ docker ' + composeArgs.join(' ') + '\n   Directorio: ' + safeDir + '\n\n');
+
+    const proc = spawn('docker', composeArgs, {
+      env: buildDockerEnv(),
+      cwd: safeDir,
+      windowsHide: true,
+    });
+    activeStreams.set(streamId, proc);
+
+    proc.stdout.on('data', d => send(d.toString()));
+    proc.stderr.on('data', d => send(d.toString()));
+    proc.on('close', code => {
+      activeStreams.delete(streamId);
+      done(code);
+    });
+    proc.on('error', e => {
+      activeStreams.delete(streamId);
+      send('\nError: ' + e.message + '\n');
+      done(1);
+    });
+  } catch (e) {
+    send('Error: ' + e.message + '\n');
+    done(1);
+  }
+});
+
+// ── Get compose project info for a container ──────────────────────────────────
+ipcMain.handle('docker:getComposeInfo', async (_, { containerId }) => {
+  try {
+    const safe = sanitizeArg(containerId, 128);
+    if (!/^[a-zA-Z0-9_.\-]{1,128}$/.test(safe)) return { ok: false, error: 'ID inválido' };
+    const out = await dockerRun(['inspect', '--format', '{{json .Config.Labels}}', safe]);
+    const labels = JSON.parse(out.trim() || '{}');
+    return {
+      ok: true,
+      project:    labels['com.docker.compose.project']             || '',
+      service:    labels['com.docker.compose.service']             || '',
+      workDir:    labels['com.docker.compose.project.working_dir'] || '',
+      configFile: labels['com.docker.compose.project.config_files']|| '',
+    };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('docker:findTransferScripts', async (_, startPath) => {
   const ALLOWED_EXT = new Set(['.sh', '.ps1', '.bat', '.cmd']);
   const results = [];
