@@ -1,0 +1,112 @@
+{
+  "name": "docker-manager",
+  "version": "1.0.0",
+  "description": "Herramienta gráfica para gestión y transferencia de proyectos Docker",
+  "main": "main.js",
+  "author": "JC",
+  "license": "MIT",
+  "scripts": {
+    "start":       "electron .",
+    "dev":         "electron . --dev",
+    "build:win":   "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "build:mac":   "electron-builder --mac",
+    "build:all":   "electron-builder --win --linux --mac",
+    "audit":       "npm audit",
+    "audit:fix":   "npm audit fix",
+    "outdated":    "npm outdated",
+    "deps:update": "npm update",
+    "report:pdf":  "node scripts/generate-security-report.js"
+  },
+  "devDependencies": {
+    "electron":         "^42.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId":       "com.jc.dockermanager",
+    "productName": "Docker Manager",
+    "copyright":   "Copyright © 2026 JC",
+
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "!renderer/**/*.map",
+      "!node_modules/**",
+      "!dist/**",
+      "!**/*.md"
+    ],
+
+    "asar": true,
+    "asarUnpack": [],
+
+    "extraMetadata": {
+      "version": "1.0.0"
+    },
+
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "DockerManager-${version}-win-${arch}.${ext}"
+    },
+
+    "nsis": {
+      "oneClick":                       false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon":                  "assets/icon.ico",
+      "uninstallerIcon":                "assets/icon.ico",
+      "installerHeaderIcon":            "assets/icon.ico",
+      "createDesktopShortcut":          true,
+      "createStartMenuShortcut":        true,
+      "shortcutName":                   "Docker Manager",
+      "include":                        "assets/installer.nsh"
+    },
+
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb",      "arch": ["x64"] },
+        { "target": "rpm",      "arch": ["x64"] }
+      ],
+      "icon":        "assets/icon.png",
+      "category":    "Development",
+      "description": "Herramienta gráfica para gestión y transferencia de proyectos Docker",
+      "maintainer":  "JC",
+      "artifactName": "DockerManager-${version}-linux-${arch}.${ext}"
+    },
+
+    "deb": {
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1",
+                  "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1"]
+    },
+
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "icon":          "assets/icon.icns",
+      "category":      "public.app-category.developer-tools",
+      "darkModeSupport": true,
+      "artifactName":  "DockerManager-${version}-mac-${arch}.${ext}",
+      "minimumSystemVersion": "10.15"
+    },
+
+    "dmg": {
+      "title":       "Docker Manager ${version}",
+      "iconSize":    128,
+      "window":      { "width": 540, "height": 380 }
+    },
+
+    "publish": null
+  }
+}

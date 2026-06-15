@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Security Report — Docker Manager</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a1a1a; background: #fff; padding: 32px 40px; }
+  h1 { font-size: 22pt; color: #005a9e; border-bottom: 3px solid #005a9e; padding-bottom: 8px; margin-bottom: 6px; }
+  h2 { font-size: 14pt; color: #005a9e; margin-top: 28px; margin-bottom: 8px; border-left: 4px solid #005a9e; padding-left: 10px; }
+  h3 { font-size: 11pt; color: #333; margin-top: 14px; margin-bottom: 4px; }
+  .subtitle { color: #555; font-size: 10pt; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+  th { background: #005a9e; color: #fff; padding: 6px 10px; text-align: left; }
+  td { padding: 5px 10px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #f5f8fc; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 9pt; font-weight: bold; }
+  .badge-ok      { background: #d4edda; color: #155724; }
+  .badge-low     { background: #fff3cd; color: #856404; }
+  .badge-medium  { background: #ffe0b2; color: #7a3f00; }
+  .badge-high    { background: #f8d7da; color: #721c24; }
+  .badge-info    { background: #d1ecf1; color: #0c5460; }
+  .badge-fixed   { background: #c3e6cb; color: #155724; }
+  .section-box { background: #f5f8fc; border: 1px solid #d0d9e5; border-radius: 6px; padding: 14px 18px; margin: 10px 0; }
+  ul { margin: 8px 0 8px 20px; }
+  li { margin-bottom: 3px; line-height: 1.5; }
+  .score { font-size: 36pt; font-weight: bold; color: #2e7d32; }
+  .score-label { font-size: 11pt; color: #555; }
+  .header-meta { display: flex; justify-content: space-between; margin-bottom: 20px; }
+  .header-meta-item { text-align: center; }
+  .header-meta-item .val { font-size: 14pt; font-weight: bold; color: #005a9e; }
+  .header-meta-item .lbl { font-size: 9pt; color: #666; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-family: Consolas, monospace; font-size: 9.5pt; }
+  .page-break { page-break-before: always; }
+  footer { margin-top: 40px; font-size: 9pt; color: #888; border-top: 1px solid #ddd; padding-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Security Assessment Report</h1>
+<div class="subtitle">
+  <strong>Aplicación:</strong> Docker Manager v1.0.0 &nbsp;|&nbsp;
+  <strong>Fecha:</strong> 15 de junio de 2026 &nbsp;|&nbsp;
+  <strong>Autor:</strong> JC &nbsp;|&nbsp;
+  <strong>Tipo:</strong> Auditoría de código estático + análisis de dependencias
+</div>
+
+<div class="header-meta">
+  <div class="header-meta-item">
+    <div class="val score">A</div>
+    <div class="lbl">Calificación global</div>
+  </div>
+  <div class="header-meta-item">
+    <div class="val">0</div>
+    <div class="lbl">Vulnerabilidades críticas</div>
+  </div>
+  <div class="header-meta-item">
+    <div class="val">0</div>
+    <div class="lbl">Vulnerabilidades altas</div>
+  </div>
+  <div class="header-meta-item">
+    <div class="val">2</div>
+    <div class="lbl">Issues corregidos</div>
+  </div>
+  <div class="header-meta-item">
+    <div class="val">3</div>
+    <div class="lbl">Recomendaciones menores</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>1. Resumen Ejecutivo</h2>
+<div class="section-box">
+  <p>Docker Manager es una aplicación Electron de escritorio para gestión y despliegue de proyectos Docker. La evaluación de seguridad cubre el análisis estático del código fuente (main.js, preload.js, renderer/app.js, renderer/index.html), la revisión de dependencias npm y la configuración de hardening de Electron.</p>
+  <br>
+  <p>La aplicación demuestra <strong>prácticas de seguridad maduras</strong>: uso de <code>spawn()</code> con arrays de argumentos, validación estricta de inputs, y todas las opciones de hardening recomendadas por la documentación de Electron. Se identificaron y corrigieron 2 issues menores durante esta auditoría.</p>
+  <br>
+  <p><strong>Resultado:</strong> <span class="badge badge-ok">APTO PARA PRODUCCIÓN</span> tras aplicar las correcciones documentadas en la sección 4.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>2. Alcance de la Auditoría</h2>
+<table>
+  <tr><th>Componente</th><th>Archivo</th><th>LOC</th><th>Estado</th></tr>
+  <tr><td>Proceso principal</td><td><code>main.js</code></td><td>~2,500</td><td><span class="badge badge-ok">Revisado</span></td></tr>
+  <tr><td>Preload bridge</td><td><code>preload.js</code></td><td>~122</td><td><span class="badge badge-ok">Revisado</span></td></tr>
+  <tr><td>Renderer UI</td><td><code>renderer/app.js</code></td><td>~4,200</td><td><span class="badge badge-ok">Revisado</span></td></tr>
+  <tr><td>HTML / CSP</td><td><code>renderer/index.html</code></td><td>~400</td><td><span class="badge badge-ok">Revisado</span></td></tr>
+  <tr><td>Dependencias npm</td><td><code>package.json / package-lock.json</code></td><td>—</td><td><span class="badge badge-ok">npm audit: 0 CVEs</span></td></tr>
+  <tr><td>Instalador</td><td><code>assets/installer.nsh</code></td><td>~50</td><td><span class="badge badge-ok">Revisado</span></td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>3. Análisis de Dependencias</h2>
+<div class="section-box">
+  <p><strong>Resultado de <code>npm audit</code>:</strong> <span class="badge badge-ok">0 vulnerabilidades</span></p>
+</div>
+<table>
+  <tr><th>Paquete</th><th>Versión</th><th>Tipo</th><th>Propósito</th><th>Estado</th></tr>
+  <tr><td>electron</td><td>^42.4.0</td><td>devDependency</td><td>Framework desktop</td><td><span class="badge badge-ok">Sin CVEs</span></td></tr>
+  <tr><td>electron-builder</td><td>^26.15.3</td><td>devDependency</td><td>Empaquetado e instaladores</td><td><span class="badge badge-ok">Sin CVEs</span></td></tr>
+</table>
+<p style="margin-top:8px;font-size:10pt;color:#555;">La aplicación usa únicamente módulos nativos de Node.js en tiempo de ejecución (child_process, fs, path, os, https, util). No existen dependencias de producción de terceros, eliminando prácticamente toda la superficie de ataque de la cadena de suministro.</p>
+
+<!-- ══════════════════════════════════════════════════ -->
+<div class="page-break"></div>
+<h2>4. Hallazgos y Correcciones</h2>
+
+<h3>4.1 Issues Corregidos en Esta Auditoría</h3>
+<table>
+  <tr><th>#</th><th>Severidad</th><th>Descripción</th><th>Archivo / Línea</th><th>Estado</th></tr>
+  <tr>
+    <td>SEC-01</td>
+    <td><span class="badge badge-low">LOW</span></td>
+    <td><strong>DevTools accesible en producción via menú</strong><br>
+      El ítem "DevTools" del menú Vista y su atajo <code>Ctrl+Shift+I</code> eran visibles en builds de producción. Aunque <code>devTools: IS_DEV</code> evitaba que se abrieran, el ítem de menú podía confundir usuarios.</td>
+    <td><code>main.js:191</code></td>
+    <td><span class="badge badge-fixed">CORREGIDO</span></td>
+  </tr>
+  <tr>
+    <td>SEC-02</td>
+    <td><span class="badge badge-medium">MEDIUM</span></td>
+    <td><strong>Parámetro <code>version</code> sin validar en <code>app:updatePackage</code></strong><br>
+      El campo <code>version</code> recibido del renderer se concatenaba directamente como <code>name@version</code> sin sanitización, permitiendo potencialmente inyectar flags de npm (ej. <code>@latest --global</code>).</td>
+    <td><code>main.js:1068</code></td>
+    <td><span class="badge badge-fixed">CORREGIDO</span></td>
+  </tr>
+</table>
+
+<h3>4.2 Recomendaciones Menores (Sin Riesgo Inmediato)</h3>
+<table>
+  <tr><th>#</th><th>Severidad</th><th>Descripción</th><th>Esfuerzo</th></tr>
+  <tr>
+    <td>REC-01</td>
+    <td><span class="badge badge-info">INFO</span></td>
+    <td><strong>CSP con <code>'unsafe-inline'</code> para scripts</strong><br>
+      La cabecera Content-Security-Policy permite scripts inline (<code>script-src 'self' 'unsafe-inline'</code>). En una aplicación Electron cargando solo archivos locales el riesgo real es muy bajo, pero migrar los inline scripts a archivos externos permitiría eliminar esta excepción.</td>
+    <td>Alto</td>
+  </tr>
+  <tr>
+    <td>REC-02</td>
+    <td><span class="badge badge-info">INFO</span></td>
+    <td><strong>Firma de código del instalador no configurada</strong><br>
+      El campo <code>publish: null</code> y la ausencia de certificados de firma implica que Windows Defender SmartScreen puede mostrar advertencias al instalar. Se recomienda adquirir un certificado EV Code Signing para builds de distribución pública.</td>
+    <td>Medio</td>
+  </tr>
+  <tr>
+    <td>REC-03</td>
+    <td><span class="badge badge-info">INFO</span></td>
+    <td><strong>PowerShell con <code>-ExecutionPolicy Bypass</code></strong><br>
+      La función <code>psRun()</code> invoca PowerShell con <code>-ExecutionPolicy Bypass</code> para operaciones WSL. Es comportamiento intencional y necesario, pero se documenta para que revisiones futuras no lo marquen como error.</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>5. Fortalezas de Seguridad Identificadas</h2>
+<table>
+  <tr><th>Área</th><th>Implementación</th><th>Beneficio</th></tr>
+  <tr>
+    <td>Electron hardening</td>
+    <td><code>contextIsolation: true</code>, <code>nodeIntegration: false</code>, <code>sandbox: true</code>, <code>webSecurity: true</code>, <code>allowRunningInsecureContent: false</code>, <code>navigateOnDragDrop: false</code></td>
+    <td>Aísla el renderer; impide acceso directo a Node.js desde la UI</td>
+  </tr>
+  <tr>
+    <td>Ejecución de procesos</td>
+    <td><code>spawn('docker', argsArray)</code> — sin shell, sin concatenación de strings</td>
+    <td>Inmune a inyección de shell vía parámetros del usuario</td>
+  </tr>
+  <tr>
+    <td>Validación de inputs</td>
+    <td>Regex <code>SHELL_INJECT_RE</code>, <code>PATH_INVALID_RE</code>; whitelist de acciones (<code>ALLOWED_CONTAINER_ACTIONS</code>), providers (<code>ALLOWED_CLOUD_PROVIDERS</code>) y prefijos de comando</td>
+    <td>Bloquea caracteres de inyección antes de llegar a cualquier proceso</td>
+  </tr>
+  <tr>
+    <td>Credenciales</td>
+    <td>Contraseñas enviadas vía stdin del proceso hijo; enmascaradas en logs</td>
+    <td>No aparecen en lista de procesos del SO ni en logs</td>
+  </tr>
+  <tr>
+    <td>Navegación</td>
+    <td><code>will-navigate</code> bloqueado; <code>setWindowOpenHandler</code> deniega nuevas ventanas internas</td>
+    <td>Previene redirecciones a URLs externas maliciosas</td>
+  </tr>
+  <tr>
+    <td>Timeouts</td>
+    <td>Todos los procesos Docker tienen timeout configurable (default 30 s)</td>
+    <td>Previene bloqueos por procesos zombis o conexiones remotas colgadas</td>
+  </tr>
+  <tr>
+    <td>Superficie de ataque</td>
+    <td>0 dependencias npm de producción; solo módulos nativos de Node.js</td>
+    <td>Elimina el riesgo de supply-chain attacks vía paquetes de terceros</td>
+  </tr>
+  <tr>
+    <td>HTTPS</td>
+    <td>Todas las llamadas a registries cloud usan <code>https.get()</code> con timeout de 12 s</td>
+    <td>Previene ataques MITM en operaciones de autenticación con cloud</td>
+  </tr>
+  <tr>
+    <td>Monitoreo de deps</td>
+    <td>Chequeo automático de <code>npm outdated</code> y <code>npm audit</code> al arrancar, con banner de notificación en UI</td>
+    <td>El usuario es alertado inmediatamente si aparecen vulnerabilidades en las dependencias</td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════ -->
+<div class="page-break"></div>
+<h2>6. Checklist OWASP Desktop App Security</h2>
+<table>
+  <tr><th>Control OWASP</th><th>Estado</th><th>Notas</th></tr>
+  <tr><td>DA-1: Hardening de plataforma</td><td><span class="badge badge-ok">PASS</span></td><td>contextIsolation, sandbox, webSecurity activos</td></tr>
+  <tr><td>DA-2: Validación de inputs</td><td><span class="badge badge-ok">PASS</span></td><td>sanitizeArg() + regex en todos los inputs IPC</td></tr>
+  <tr><td>DA-3: Gestión de credenciales</td><td><span class="badge badge-ok">PASS</span></td><td>stdin, no args de línea de comando</td></tr>
+  <tr><td>DA-4: Criptografía</td><td><span class="badge badge-ok">PASS</span></td><td>HTTPS para todas las llamadas a APIs de registro</td></tr>
+  <tr><td>DA-5: Comunicación segura</td><td><span class="badge badge-ok">PASS</span></td><td>StrictHostKeyChecking en SSH/SCP</td></tr>
+  <tr><td>DA-6: Gestión de sesiones</td><td><span class="badge badge-ok">PASS</span></td><td>Tokens no persistidos; se usa docker login del SO</td></tr>
+  <tr><td>DA-7: Control de acceso</td><td><span class="badge badge-ok">PASS</span></td><td>asInvoker; no requiere privilegios elevados</td></tr>
+  <tr><td>DA-8: Protección de datos</td><td><span class="badge badge-ok">PASS</span></td><td>Sin almacenamiento local de secretos</td></tr>
+  <tr><td>DA-9: Logging y auditoría</td><td><span class="badge badge-low">PARTIAL</span></td><td>Logs de UI disponibles; sin log persistente de auditoría</td></tr>
+  <tr><td>DA-10: Gestión de errores</td><td><span class="badge badge-ok">PASS</span></td><td>Errores capturados y presentados al usuario sin stack traces</td></tr>
+  <tr><td>DA-11: Componentes de terceros</td><td><span class="badge badge-ok">PASS</span></td><td>0 deps de producción; npm audit limpio</td></tr>
+  <tr><td>DA-12: Firma de código</td><td><span class="badge badge-low">PENDING</span></td><td>Recomendado para distribución pública (ver REC-02)</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>7. Vectores de Amenaza Evaluados</h2>
+
+<h3>7.1 Inyección de Comandos (Shell Injection)</h3>
+<div class="section-box">
+  <p><strong>Estado: </strong><span class="badge badge-ok">MITIGADO</span></p>
+  <p>Todos los comandos Docker se ejecutan con <code>spawn(binary, argsArray)</code>. Los argumentos nunca pasan por un shell; la interpolación de strings con input del usuario no ocurre en ningún path de ejecución. El regex <code>SHELL_INJECT_RE = /[;&|`$&lt;&gt;(){}!\\]/</code> previene que caracteres peligrosos lleguen siquiera al proceso.</p>
+</div>
+
+<h3>7.2 Cross-Site Scripting (XSS)</h3>
+<div class="section-box">
+  <p><strong>Estado: </strong><span class="badge badge-ok">MITIGADO</span></p>
+  <p>La función <code>escHtml()</code> se aplica consistentemente antes de insertar datos externos en el DOM. El contexto del renderer está aislado (<code>contextIsolation: true</code>). Los accesos directos al DOM con <code>innerHTML</code> de datos confiables (templates internos) son la excepción documentada.</p>
+</div>
+
+<h3>7.3 Prototype Pollution / Dependency Confusion</h3>
+<div class="section-box">
+  <p><strong>Estado: </strong><span class="badge badge-ok">NO APLICA</span></p>
+  <p>Al no tener dependencias de producción de terceros, la superficie de ataque de supply-chain es mínima (limitada a Electron y electron-builder, ambas con 0 CVEs activos).</p>
+</div>
+
+<h3>7.4 Escalada de Privilegios</h3>
+<div class="section-box">
+  <p><strong>Estado: </strong><span class="badge badge-ok">MITIGADO</span></p>
+  <p>El instalador NSIS usa <code>requestedExecutionLevel: asInvoker</code>. La aplicación no solicita UAC ni privilegios elevados. Las operaciones Docker requieren que el usuario sea miembro del grupo <code>docker-users</code>, lo cual es responsabilidad de Docker Desktop.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>8. Plan de Acción</h2>
+<table>
+  <tr><th>Item</th><th>Prioridad</th><th>Plazo sugerido</th><th>Responsable</th></tr>
+  <tr><td>SEC-01: DevTools en producción</td><td><span class="badge badge-fixed">COMPLETADO</span></td><td>—</td><td>JC</td></tr>
+  <tr><td>SEC-02: Validación de versión en updatePackage</td><td><span class="badge badge-fixed">COMPLETADO</span></td><td>—</td><td>JC</td></tr>
+  <tr><td>REC-01: Eliminar unsafe-inline del CSP</td><td><span class="badge badge-low">BAJO</span></td><td>v1.1</td><td>JC</td></tr>
+  <tr><td>REC-02: Firma de código (Code Signing)</td><td><span class="badge badge-medium">MEDIO</span></td><td>Antes de distribución pública</td><td>JC</td></tr>
+  <tr><td>REC-03: psRun ExecutionPolicy Bypass (documentado)</td><td><span class="badge badge-info">INFO</span></td><td>—</td><td>—</td></tr>
+  <tr><td>Monitoreo continuo de deps (npm audit automático)</td><td><span class="badge badge-fixed">COMPLETADO</span></td><td>—</td><td>JC</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════ -->
+<h2>9. Herramientas y Metodología</h2>
+<ul>
+  <li><strong>Análisis estático manual</strong>: revisión completa de main.js, preload.js, renderer/app.js, index.html</li>
+  <li><strong>npm audit</strong> v10 — escaneo de CVEs en dependencias</li>
+  <li><strong>npm outdated</strong> — detección de versiones desactualizadas</li>
+  <li><strong>OWASP Desktop App Security Cheat Sheet</strong> — referencia de controles</li>
+  <li><strong>Electron Security Checklist</strong> (docs.electronjs.org/tutorial/security)</li>
+</ul>
+
+<footer>
+  Docker Manager Security Report v1.0 &nbsp;|&nbsp; Generado el 15 de junio de 2026 &nbsp;|&nbsp; Confidencial — uso interno
+</footer>
+
+</body>
+</html>

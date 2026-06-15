@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+  <title>Docker Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ══ TOP BAR ══════════════════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13.98 11.08H12v-2h1.98v2zm-4.01 0H8v-2h1.97v2zm-3.97 0H4v-2h1.97v2z"/>
+        <path d="M22 11.07c-.48-.36-1.6-.49-2.44-.32-.21-.9-.75-1.69-1.62-2.27l-.54-.33-.35.53c-.45.68-.57 1.8-.12 2.54-.21.12-.63.28-.86.32-.52.09-1.01.07-1.47-.07H2.12c-.12 1.11.15 2.77 1.08 3.83.9 1.02 2.26 1.54 4.05 1.54 3.85 0 6.72-1.73 8.05-4.88.52.02 1.66.02 2.25-.97.04-.06.29-.52.29-.52l-.84-.41zM5 12H3v2h2v-2zm3 0H6v2h2v-2zm3 0H9v2h2v-2zm3 0h-2v2h2v-2z"/>
+      </svg>
+      Docker Manager
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-actions">
+      <span id="docker-version-badge" class="badge-docker">Docker —</span>
+      <button class="btn-icon" onclick="refreshAll()" title="Actualizar todo (F5)">⟳ Refresh</button>
+      <button class="btn-icon" onclick="showTab('settings')" title="Configuración">⚙️</button>
+    </div>
+  </header>
+
+  <!-- ══ BANNER DE SEGURIDAD (oculto por defecto) ══════════════════════ -->
+  <div id="security-banner" class="security-banner hidden">
+    <span id="security-banner-msg"></span>
+    <button class="security-banner-btn" onclick="showTab('settings');dismissSecurityBanner()">Ver actualizaciones</button>
+    <button class="security-banner-close" onclick="dismissSecurityBanner()">✕</button>
+  </div>
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-section-label">Recursos</div>
+
+    <div class="nav-item active" onclick="showTab('containers')" data-tab="containers">
+      <span class="nav-icon">🐳</span> Contenedores
+      <span class="nav-badge green" id="badge-running">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('images')" data-tab="images">
+      <span class="nav-icon">🖼️</span> Imágenes
+      <span class="nav-badge" id="badge-images">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('volumes')" data-tab="volumes">
+      <span class="nav-icon">💾</span> Volúmenes
+      <span class="nav-badge" id="badge-volumes">0</span>
+    </div>
+
+    <div class="sidebar-section-label" style="margin-top:8px">Operaciones</div>
+
+    <div class="nav-item" onclick="showTab('transfer')" data-tab="transfer">
+      <span class="nav-icon">📦</span> Transferir
+    </div>
+    <div class="nav-item" onclick="showTab('remote')" data-tab="remote">
+      <span class="nav-icon">🌐</span> Remoto & Nube
+    </div>
+    <div class="nav-item" onclick="showTab('logs')" data-tab="logs">
+      <span class="nav-icon">📋</span> Logs
+    </div>
+    <div class="nav-item" onclick="showTab('wsl')" data-tab="wsl">
+      <span class="nav-icon">🐧</span> WSL
+      <span class="nav-badge" id="badge-wsl">0</span>
+    </div>
+
+    <div class="sidebar-section-label" style="margin-top:8px">Proyectos</div>
+
+    <div class="project-filter active" data-project="all" onclick="filterByProject('all')">
+      <div class="project-dot" style="background:var(--blue)"></div>
+      <span class="project-name">Todos</span>
+    </div>
+    <div id="project-list"></div>
+
+    <div class="sidebar-footer" id="sidebar-footer">
+      Cargando…
+    </div>
+  </nav>
+
+  <!-- ══ MAIN CONTENT ══════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- ── Contenedores ───────────────────────────────────────────── -->
+    <div id="tab-containers" class="tab-content">
+      <div class="main-header">
+        <h1 class="main-title">Contenedores</h1>
+        <span class="main-count" id="container-count">—</span>
+        <div class="topbar-spacer"></div>
+        <div class="search-wrap">
+          <input class="search-box" id="search-containers" type="text"
+                 placeholder="Buscar contenedor…" oninput="renderContainers()">
+        </div>
+        <select id="filter-state" class="form-input" style="width:130px" onchange="renderContainers()">
+          <option value="all">Todos los estados</option>
+          <option value="running">Corriendo</option>
+          <option value="exited">Detenidos</option>
+        </select>
+      </div>
+
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card green clickable" onclick="filterByStat('running')" title="Ver solo contenedores corriendo">
+          <span class="stat-value" id="s-running">0</span>
+          <span class="stat-label">Corriendo <span class="stat-hint">↗</span></span>
+        </div>
+        <div class="stat-card red clickable" onclick="filterByStat('exited')" title="Ver solo contenedores detenidos">
+          <span class="stat-value" id="s-stopped">0</span>
+          <span class="stat-label">Detenidos <span class="stat-hint">↗</span></span>
+        </div>
+        <div class="stat-card blue clickable" onclick="showTab('images')" title="Ver imágenes">
+          <span class="stat-value" id="s-images">0</span>
+          <span class="stat-label">Imágenes <span class="stat-hint">↗</span></span>
+        </div>
+        <div class="stat-card yellow clickable" onclick="showTab('volumes')" title="Ver volúmenes">
+          <span class="stat-value" id="s-volumes">0</span>
+          <span class="stat-label">Volúmenes <span class="stat-hint">↗</span></span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="s-diskused">—</span>
+          <span class="stat-label">Disco total</span>
+        </div>
+        <div class="stat-card" id="s-remote-card" style="display:none">
+          <span class="stat-value" style="font-size:13px" id="s-remote-host">—</span>
+          <span class="stat-label">🌐 Remoto <span class="stat-hint" onclick="disconnectRemote()">✕</span></span>
+        </div>
+      </div>
+
+      <div class="scroll-area">
+        <div id="container-grid" class="container-grid">
+          <div class="loading-row"><div class="spinner"></div>Cargando contenedores…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Imágenes ───────────────────────────────────────────────── -->
+    <div id="tab-images" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">Imágenes Docker</h1>
+        <span class="main-count" id="images-count">—</span>
+        <div class="topbar-spacer"></div>
+        <div class="search-wrap">
+          <input class="search-box" id="search-images" type="text"
+                 placeholder="Buscar imagen…" oninput="renderImages()">
+        </div>
+        <button class="btn red" onclick="pruneImages()" title="Eliminar imágenes sin usar">
+          🗑 Limpiar no usadas
+        </button>
+      </div>
+      <div class="scroll-area">
+        <div id="images-content">
+          <div class="loading-row"><div class="spinner"></div>Cargando imágenes…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Volúmenes ──────────────────────────────────────────────── -->
+    <div id="tab-volumes" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">Volúmenes</h1>
+        <span class="main-count" id="volumes-count">—</span>
+        <div class="topbar-spacer"></div>
+        <button class="btn red" onclick="pruneVolumes()">🗑 Limpiar no usados</button>
+      </div>
+      <div class="scroll-area">
+        <div id="volumes-content">
+          <div class="loading-row"><div class="spinner"></div>Cargando volúmenes…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Transferir ─────────────────────────────────────────────── -->
+    <div id="tab-transfer" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">Transferir Proyecto Docker</h1>
+        <span class="main-count text-muted">Exportar bundle → Copiar al servidor → Importar y levantar</span>
+      </div>
+      <div class="scroll-area">
+
+        <!-- Flujo visual -->
+        <div class="workflow-banner">
+          <div class="wf-step active">
+            <div class="wf-num">1</div>
+            <div class="wf-label">EXPORTAR<br><small>Crear bundle</small></div>
+          </div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step">
+            <div class="wf-num">2</div>
+            <div class="wf-label">TRANSFERIR<br><small>SCP / USB / FTP</small></div>
+          </div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step">
+            <div class="wf-num">3</div>
+            <div class="wf-label">IMPORTAR<br><small>Deploy en destino</small></div>
+          </div>
+        </div>
+
+        <div class="transfer-grid transfer-grid-stack">
+
+          <!-- ═══ PACK ═══ -->
+          <div class="transfer-card" style="max-width:none;flex:1">
+            <div class="transfer-card-title">
+              <span class="tc-badge export">EXPORTAR</span>
+              📤 Crear Bundle Portable
+            </div>
+            <p class="transfer-card-desc">
+              Escanea cualquier proyecto Docker (Windows / Linux / Mac), elige los contenedores
+              e imágenes a incluir y genera un <code>.tar.gz</code> autocontenido con scripts de despliegue.
+            </p>
+
+            <!-- Paso 1 — Seleccionar directorio -->
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <label class="form-label">Directorio del proyecto (donde está <code>docker-compose.yml</code>)</label>
+                <div class="form-input-row">
+                  <input class="form-input" id="pack-project-path" type="text"
+                         placeholder="/home/user/miapp  o  C:\Proyectos\miapp">
+                  <button class="btn" onclick="browsePackProject()">📂 Explorar</button>
+                  <button class="btn btn-primary" onclick="scanPackProject()" id="pack-scan-btn">🔍 Escanear</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 2 — Selección de contenedores (oculto hasta escanear) -->
+            <div class="step" id="pack-step-2" style="display:none">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                  <label class="form-label" style="margin:0">Selecciona contenedores / imágenes a incluir</label>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm" onclick="packSelectAll(true)">✓ Todos</button>
+                    <button class="btn btn-sm" onclick="packSelectAll(false)">✗ Ninguno</button>
+                    <button class="btn btn-sm" onclick="packAddCustom()">＋ Añadir manual</button>
+                  </div>
+                </div>
+
+                <!-- Aviso contenedores activos -->
+                <div id="pack-running-warn" class="pack-warn" style="display:none">
+                  ⚠ Algunos contenedores están <strong>en ejecución</strong>. Para un backup consistente se recomienda detenerlos.
+                  <button class="btn btn-sm btn-danger" onclick="packStopRunning()" style="margin-left:8px">⏹ Detener seleccionados</button>
+                </div>
+
+                <!-- Tabla de contenedores -->
+                <div class="pack-table-wrap">
+                  <table class="pack-table" id="pack-container-table">
+                    <thead>
+                      <tr>
+                        <th style="width:32px"><input type="checkbox" id="pack-check-all" onchange="packSelectAll(this.checked)" checked></th>
+                        <th>Servicio</th>
+                        <th>Imagen</th>
+                        <th>Volúmenes</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody id="pack-container-tbody"></tbody>
+                  </table>
+                </div>
+
+                <!-- Modal añadir contenedor manual -->
+                <div id="pack-add-modal" class="pack-add-modal" style="display:none">
+                  <div class="pack-add-inner">
+                    <div style="font-weight:600;margin-bottom:8px">➕ Añadir contenedor / imagen manual</div>
+                    <div class="form-input-row" style="margin-bottom:6px">
+                      <label class="form-label" style="width:80px;margin:0">Servicio</label>
+                      <input class="form-input" id="pack-add-name" placeholder="mi-servicio">
+                    </div>
+                    <div class="form-input-row" style="margin-bottom:6px">
+                      <label class="form-label" style="width:80px;margin:0">Imagen</label>
+                      <input class="form-input" id="pack-add-image" placeholder="myapp:latest">
+                    </div>
+                    <div class="form-input-row" style="margin-bottom:10px">
+                      <label class="form-label" style="width:80px;margin:0">Volúmenes</label>
+                      <input class="form-input" id="pack-add-volumes" placeholder="vol1, vol2 (opcional)">
+                    </div>
+                    <div style="display:flex;gap:8px">
+                      <button class="btn btn-primary btn-sm" onclick="packAddCustomConfirm()">Añadir</button>
+                      <button class="btn btn-sm" onclick="document.getElementById('pack-add-modal').style.display='none'">Cancelar</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 3 — Opciones -->
+            <div class="step" id="pack-step-3" style="display:none">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <label class="form-label">Opciones del bundle</label>
+                <div class="form-check">
+                  <input type="checkbox" id="pack-no-volumes">
+                  <label for="pack-no-volumes">Omitir datos de volúmenes (solo imágenes)</label>
+                </div>
+                <div class="form-check">
+                  <input type="checkbox" id="pack-open-folder" checked>
+                  <label for="pack-open-folder">Abrir carpeta al terminar</label>
+                </div>
+                <div style="margin-top:8px">
+                  <label class="form-label">Guardar bundle en (opcional)</label>
+                  <div class="form-input-row">
+                    <input class="form-input" id="pack-output-dir" type="text"
+                           placeholder="Por defecto: bundles/ dentro del proyecto">
+                    <button class="btn" onclick="browsePackOutput()">📂</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 4 — Ejecutar -->
+            <div class="step" id="pack-step-4" style="display:none">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                <button class="btn primary" style="width:100%;justify-content:center;padding:9px"
+                        onclick="runPackBundle()">
+                  📦 Crear Bundle (.tar.gz)
+                </button>
+              </div>
+            </div>
+
+            <div class="console-wrap" id="pack-console-wrap" style="display:none">
+              <div class="console-header">
+                <span>⬛ Progreso del bundle</span>
+                <span class="topbar-spacer"></span>
+                <button class="btn-icon" onclick="killPack()" id="pack-kill-btn">⏹ Detener</button>
+                <button class="btn-icon" onclick="clearConsole('pack-output')">🗑</button>
+              </div>
+              <div class="console-body" id="pack-output"></div>
+            </div>
+          </div>
+
+          <!-- ═══ DEPLOY ═══ -->
+          <div class="transfer-card">
+            <div class="transfer-card-title">
+              <span class="tc-badge import">IMPORTAR</span>
+              📥 Desplegar en Servidor Destino
+            </div>
+            <p class="transfer-card-desc">
+              Carga el bundle en el servidor destino: importa imágenes, restaura volúmenes
+              y levanta los 3 contenedores automáticamente.
+            </p>
+
+            <!-- Paso 1 -->
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <label class="form-label">Selecciona el archivo bundle</label>
+                <div class="form-input-row">
+                  <input class="form-input" id="deploy-bundle-path" type="text"
+                         placeholder="edificio-bundle-FECHA.tar.gz…">
+                  <button class="btn" onclick="browseDeploy()">📂 Abrir</button>
+                </div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px">
+                  El script <code>deploy.sh</code> / <code>deploy.ps1</code> se detecta del bundle.
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 2 -->
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <label class="form-label">Configura el destino</label>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                  <label class="form-label" style="margin:0;white-space:nowrap">Puerto web</label>
+                  <input class="form-input" id="deploy-port" type="number"
+                         value="3000" style="width:90px">
+                </div>
+                <div class="form-check">
+                  <input type="checkbox" id="deploy-skip-volumes">
+                  <label for="deploy-skip-volumes">No restaurar datos (instalación limpia)</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 3 -->
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <label class="form-label">Script de despliegue</label>
+                <div class="form-input-row">
+                  <input class="form-input" id="deploy-script-path" type="text"
+                         placeholder="Auto-detectado del bundle…" readonly
+                         style="font-size:11px;color:var(--text-3)">
+                  <button class="btn" onclick="browseDeployScript()" title="Seleccionar script manualmente">📂</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Paso 4 -->
+            <div class="step">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                <label class="form-label">Ejecuta el despliegue</label>
+                <button class="btn primary" style="width:100%;justify-content:center;padding:9px"
+                        onclick="runDeploy()">
+                  🚀 Desplegar en este servidor
+                </button>
+              </div>
+            </div>
+
+            <div class="console-wrap" id="deploy-console-wrap" style="display:none">
+              <div class="console-header">
+                <span>⬛ Terminal — deploy</span>
+                <span class="topbar-spacer"></span>
+                <button class="btn-icon" onclick="killDeploy()" id="deploy-kill-btn">⏹ Detener</button>
+                <button class="btn-icon" onclick="clearConsole('deploy-output')">🗑</button>
+              </div>
+              <div class="console-body" id="deploy-output"></div>
+            </div>
+          </div>
+
+        </div><!-- /transfer-grid -->
+      </div>
+    </div>
+
+    <!-- ── Logs ───────────────────────────────────────────────────── -->
+    <div id="tab-logs" class="tab-content hidden" style="display:none;flex-direction:column;padding:14px 20px;height:100%;box-sizing:border-box;">
+      <div class="logs-header">
+        <!-- Source toggle -->
+        <button id="log-src-docker" class="btn blue" onclick="switchLogSource('docker')" title="Logs de contenedores Docker">🐳 Docker</button>
+        <button id="log-src-wsl"    class="btn"      onclick="switchLogSource('wsl')"    title="Historial de comandos WSL">🐧 WSL</button>
+        <div style="width:1px;background:var(--border);height:22px;margin:0 4px"></div>
+        <!-- Docker-specific controls (hidden when WSL selected) -->
+        <span id="log-docker-ctrls" style="display:contents">
+          <select class="log-select" id="log-select" onchange="loadLogs()">
+            <option value="">— Selecciona un contenedor —</option>
+          </select>
+          <select class="form-input" id="log-lines" style="width:100px" onchange="loadLogs()">
+            <option value="100">100 líneas</option>
+            <option value="200" selected>200 líneas</option>
+            <option value="500">500 líneas</option>
+            <option value="all">Todas</option>
+          </select>
+          <button class="btn blue" onclick="toggleFollowLogs()" id="btn-follow">▶ Follow</button>
+        </span>
+        <button class="btn" onclick="clearLogs()">🗑 Limpiar</button>
+      </div>
+      <div class="log-body" id="log-body">
+        <span style="color:var(--text-3)">Selecciona un contenedor para ver sus logs…</span>
+      </div>
+    </div>
+
+    <!-- ── WSL ───────────────────────────────────────────────────── -->
+    <div id="tab-wsl" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">WSL — Subsistema Linux</h1>
+        <span class="main-count" id="wsl-count">—</span>
+        <div class="topbar-spacer"></div>
+        <button class="btn btn-sm" onclick="refreshWsl()">↺ Refrescar</button>
+        <button class="btn btn-sm btn-danger" onclick="wslActionGlobal('shutdown')">⏹ Apagar todas</button>
+        <button class="btn btn-sm" onclick="wslActionGlobal('update')">⬆ Actualizar WSL</button>
+        <button class="btn btn-sm" onclick="wslShowStatus()">ℹ Estado WSL</button>
+        <button class="btn btn-sm" id="wsl-ribbon-toggle-btn" onclick="wslToggleRemoteRibbon()" title="Conectar a WSL en otro equipo Windows vía SSH">🌐 Remoto</button>
+      </div>
+
+      <!-- ── Remote WSL Ribbon ──────────────────────────────────────────── -->
+      <div id="wsl-remote-ribbon" style="display:none">
+        <div class="wsl-ribbon-inner">
+          <div class="wsl-ribbon-title">
+            <span>🌐 Conexión a equipo WSL Remoto</span>
+            <button class="btn-close-panel" onclick="wslToggleRemoteRibbon()" title="Cerrar">✕</button>
+          </div>
+          <div class="wsl-ribbon-form">
+            <div class="wsl-ribbon-row">
+              <label class="wsl-ribbon-lbl">Host / IP</label>
+              <input id="rem-host" class="form-input" placeholder="192.168.1.100 o servidor.local" style="width:180px">
+              <label class="wsl-ribbon-lbl">Puerto SSH</label>
+              <input id="rem-port" class="form-input" type="number" value="22" style="width:70px">
+              <label class="wsl-ribbon-lbl">Usuario</label>
+              <input id="rem-user" class="form-input" placeholder="Administrador" style="width:140px">
+              <label class="wsl-ribbon-lbl">Contraseña</label>
+              <input id="rem-pass" class="form-input" type="password" placeholder="(vacío = clave SSH)" style="width:140px">
+              <label class="wsl-ribbon-lbl">Gateway WSL local</label>
+              <select id="rem-gateway" class="form-input" style="width:140px"></select>
+            </div>
+            <div class="wsl-ribbon-row" style="margin-top:6px;align-items:center;gap:8px">
+              <button class="btn btn-sm btn-primary" id="rem-connect-btn" onclick="wslRemoteConnect()">🔌 Conectar</button>
+              <button class="btn btn-sm btn-danger" id="rem-disconnect-btn" onclick="wslRemoteDisconnect()" style="display:none">⏹ Desconectar</button>
+              <button class="btn btn-sm" onclick="wslRemoteRefresh()" title="Actualizar lista de distros remotas">↺ Actualizar</button>
+              <span id="rem-status" style="font-size:11px;color:var(--text-2)"></span>
+              <span style="flex:1"></span>
+              <span style="font-size:11px;color:var(--text-2)">OpenSSH Server + WSL2 requeridos en el equipo remoto</span>
+            </div>
+            <!-- Tool install notification -->
+            <div id="rem-tool-notify" class="tool-notify" style="display:none;margin-top:6px">
+              <span class="tool-notify-icon">⚠</span>
+              <span id="rem-tool-msg"></span>
+              <button class="btn btn-sm btn-primary" id="rem-tool-btn" onclick="wslInstallMissingTool()">⬇ Instalar</button>
+              <button class="btn btn-sm" onclick="document.getElementById('rem-tool-notify').style.display='none'">✕</button>
+            </div>
+            <div id="rem-tool-log-wrap" style="display:none;margin-top:6px">
+              <div class="wsl-log-label">Instalación</div>
+              <pre id="rem-tool-log" class="wsl-log-mini"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layout principal WSL -->
+      <div class="wsl-layout">
+
+        <!-- Lista de distribuciones -->
+        <div class="wsl-list-panel">
+          <div class="scroll-area">
+            <table class="wsl-table">
+              <thead>
+                <tr>
+                  <th style="width:28px"></th>
+                  <th>Distribución</th>
+                  <th>Estado</th>
+                  <th>WSL</th>
+                  <th>Def</th>
+                  <th>IP</th>
+                  <th>Tamaño VHDX</th>
+                  <th class="wsl-col-path">Ruta</th>
+                </tr>
+              </thead>
+              <tbody id="wsl-tbody">
+                <tr><td colspan="7" class="wsl-empty">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Panel de acciones -->
+        <div class="wsl-actions-panel">
+          <div class="wsl-sel-label" id="wsl-sel-label">Selecciona una distribución</div>
+
+          <div class="wsl-action-section">
+            <div class="wsl-action-section-title">Ejecución</div>
+            <div class="wsl-btn-grid">
+              <button class="btn btn-sm" onclick="wslOpenTerminal()">🖥 Terminal</button>
+              <button class="btn btn-sm btn-primary" onclick="wslActionSel('start')" title="Iniciar la distro">▶ Iniciar</button>
+              <button class="btn btn-sm" onclick="wslActionSel('terminate')" title="Detener la distro">⏹ Detener</button>
+              <button class="btn btn-sm" onclick="wslActionSel('restart')" title="Reiniciar la distro">↺ Reiniciar</button>
+              <button class="btn btn-sm" onclick="wslActionSel('setDefault')">★ Default</button>
+              <button class="btn btn-sm" onclick="wslToggleVersion()">⇄ WSL1↔2</button>
+              <button class="btn btn-sm" onclick="wslShowResources()">📊 Recursos</button>
+            </div>
+          </div>
+
+          <div class="wsl-action-section">
+            <div class="wsl-action-section-title">Mantenimiento</div>
+            <div class="wsl-btn-grid">
+              <button class="btn btn-sm" onclick="wslUpgradePackages()">⬆ Actualizar pkgs</button>
+              <button class="btn btn-sm" onclick="wslExport()">💾 Exportar</button>
+              <button class="btn btn-sm" onclick="wslNetExportOpen()" title="Exportar a ruta de red (SMB/UNC) o unidad externa">🌐 Exportar Red</button>
+              <button class="btn btn-sm" onclick="wslOpenVhdxDir()" title="Ver directorio de la distro seleccionada">📂 Dir WSL</button>
+              <button class="btn btn-sm" onclick="wslImportFlow()">📥 Importar</button>
+            </div>
+          </div>
+
+          <div class="wsl-action-section">
+            <div class="wsl-action-section-title">Acceso y archivos</div>
+            <div class="wsl-btn-grid">
+              <button class="btn btn-sm" onclick="wslOpenExplorer()">📁 Explorador</button>
+              <button class="btn btn-sm" onclick="wslShowPanel('ssh')">🔑 SSH</button>
+              <button class="btn btn-sm" onclick="wslShowPanel('mounts')">💿 Montajes</button>
+              <button class="btn btn-sm" onclick="wslShowPanel('transfer')">📤 Transferir</button>
+
+            </div>
+          </div>
+
+          <div class="wsl-action-section wsl-danger-zone">
+            <button class="btn btn-danger" style="width:100%" onclick="wslDelete()">🗑 ELIMINAR distro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-paneles (SSH / Mounts / Transfer) -->
+      <div class="wsl-subpanel-wrap" id="wsl-subpanel-wrap" style="display:none">
+
+        <!-- SSH — Gestor + Terminal Embebida -->
+        <div class="wsl-subpanel" id="wsl-panel-ssh" style="display:none">
+          <div class="wsl-subpanel-header">
+            <span>🔑 SSH — <span id="wsl-ssh-distro-name"></span></span>
+            <button class="btn btn-sm" onclick="wslRefreshSsh()">↺ Estado</button>
+            <button class="btn-close-panel" onclick="wslHidePanel()">✕</button>
+          </div>
+
+          <!-- Pestañas: Estado SSH | Terminal -->
+          <div class="ssh-tabs">
+            <button class="ssh-tab active" id="ssh-tab-status" onclick="switchSshTab('status')">📊 Estado SSH</button>
+            <button class="ssh-tab" id="ssh-tab-terminal" onclick="switchSshTab('terminal')">🖥 Terminal</button>
+          </div>
+
+          <!-- Panel: Estado SSH -->
+          <div id="ssh-pane-status">
+            <div class="wsl-ssh-info">
+              <div class="wsl-ssh-stat"><span class="wsl-ssh-stat-lbl">Instalado:</span><span id="ssh-installed">—</span></div>
+              <div class="wsl-ssh-stat"><span class="wsl-ssh-stat-lbl">Activo:</span><span id="ssh-running">—</span></div>
+              <div class="wsl-ssh-stat"><span class="wsl-ssh-stat-lbl">Puerto:</span><span id="ssh-port">—</span></div>
+              <div class="wsl-ssh-stat"><span class="wsl-ssh-stat-lbl">Usuario:</span><span id="ssh-user">—</span></div>
+              <div class="wsl-ssh-stat"><span class="wsl-ssh-stat-lbl">IP eth0:</span><span id="ssh-ip">—</span></div>
+            </div>
+            <div class="wsl-ssh-actions">
+              <div class="wsl-ssh-action-group">
+                <button class="btn btn-sm" onclick="wslSshInstall()">📦 Instalar SSH</button>
+                <button class="btn btn-sm" onclick="wslSshPreset('ssh:regen')">🔑 Regen keys</button>
+                <button class="btn btn-sm" onclick="wslSshPreset('ssh:enableBoot')">⚡ Auto-arranque</button>
+              </div>
+              <div class="wsl-ssh-action-group">
+                <button class="btn btn-sm" onclick="wslSshPreset('ssh:start')">▶ Iniciar</button>
+                <button class="btn btn-sm" onclick="wslSshPreset('ssh:stop')">⏹ Detener</button>
+                <button class="btn btn-sm" onclick="wslSshPreset('ssh:restart')">↺ Reiniciar</button>
+                <button class="btn btn-sm" onclick="togglePortEditor()" id="btn-port-edit">⚙ Puerto…</button>
+              </div>
+            </div>
+            <!-- Port inline editor -->
+            <div id="ssh-port-editor" class="ssh-port-editor" style="display:none">
+              <span class="ssh-port-label">Nuevo puerto SSH:</span>
+              <input id="ssh-port-input" type="number" min="1" max="65535" value="22" class="ssh-port-input">
+              <button class="btn btn-sm btn-primary" onclick="wslSshApplyPort()">✓ Aplicar</button>
+              <button class="btn btn-sm" onclick="togglePortEditor()">✕</button>
+            </div>
+            <div id="wsl-ssh-log" class="wsl-log-mini"></div>
+          </div>
+
+          <!-- Panel: Terminal embebida — se convierte en ventana flotante al abrirse -->
+          <div id="ssh-pane-terminal" style="display:none">
+
+            <!-- Barra de título flotante (drag handle + controls) -->
+            <div class="ssh-float-titlebar" id="ssh-float-handle">
+              <span class="ssh-float-icon">🖥</span>
+              <span id="ssh-term-title" class="ssh-float-title">Terminal WSL</span>
+              <div class="ssh-float-controls">
+                <button class="ssh-float-btn" id="ssh-min-btn" onclick="sshTermMinimize()" title="Minimizar">🗕</button>
+                <button class="ssh-float-btn" onclick="sshTermFloatClose()" title="Cerrar ventana (mantiene conexión)">✕</button>
+              </div>
+            </div>
+
+            <!-- Cuerpo flotante (se oculta al minimizar) -->
+            <div id="ssh-float-body" class="ssh-float-body">
+
+              <!-- Formulario de conexión -->
+              <div id="ssh-conn-form" class="ssh-conn-form">
+                <div class="ssh-mode-row">
+                  <button class="ssh-mode-btn active" id="ssh-mode-wsl" onclick="setSshConnMode('wsl')">🐧 Shell WSL directo</button>
+                  <button class="ssh-mode-btn" id="ssh-mode-ssh" onclick="setSshConnMode('ssh')">🔗 SSH Externo</button>
+                </div>
+                <div id="ssh-form-wsl" class="ssh-form-section">
+                  <p class="ssh-form-hint">Abre una shell bash interactiva en la distro seleccionada sin necesitar SSH.</p>
+                  <button class="btn btn-primary ssh-connect-btn" onclick="sshTermConnect()">▶ Abrir Shell WSL</button>
+                </div>
+                <div id="ssh-form-ssh" class="ssh-form-section" style="display:none">
+                  <div class="ssh-field-row">
+                    <label class="ssh-field-lbl">Host</label>
+                    <input id="ssh-f-host" class="ssh-field-input" value="localhost" placeholder="hostname o IP">
+                    <label class="ssh-field-lbl" style="margin-left:10px">Puerto</label>
+                    <input id="ssh-f-port" class="ssh-field-input" style="width:60px" value="22">
+                  </div>
+                  <div class="ssh-field-row">
+                    <label class="ssh-field-lbl">Usuario</label>
+                    <input id="ssh-f-user" class="ssh-field-input" placeholder="root">
+                    <label class="ssh-field-lbl" style="margin-left:10px">Contraseña</label>
+                    <input id="ssh-f-pass" class="ssh-field-input" type="password" placeholder="(vacío para clave)">
+                  </div>
+                  <button class="btn btn-primary ssh-connect-btn" onclick="sshTermConnect()">🔗 Conectar SSH</button>
+                </div>
+              </div>
+
+              <!-- Terminal (visible solo cuando conectado) -->
+              <div id="ssh-term-wrap" class="ssh-term-wrap" style="display:none">
+                <div class="ssh-term-topbar">
+                  <span class="ssh-term-status-dot" id="ssh-status-dot">●</span>
+                  <span class="ssh-term-conn-label" id="ssh-term-conn-label">Conectando…</span>
+                  <div style="flex:1"></div>
+                  <button class="btn btn-sm" onclick="sshTermClear()" title="Limpiar pantalla">🗑</button>
+                  <button class="btn btn-sm" onclick="sshTermDisconnect()" style="color:var(--red)">⏹ Desconectar</button>
+                </div>
+                <div id="ssh-terminal" class="ssh-terminal" onclick="document.getElementById('ssh-term-input').focus()"></div>
+                <div class="ssh-input-bar">
+                  <span id="ssh-prompt-label" class="ssh-prompt-lbl">$</span>
+                  <input id="ssh-term-input" class="ssh-term-input"
+                    placeholder="Escribe un comando y pulsa Enter  (Ctrl+C = interrupción)"
+                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <button class="ssh-send-btn" onclick="sshTermSendInput()" title="Enviar">↵</button>
+                </div>
+              </div>
+
+            </div><!-- /ssh-float-body -->
+          </div><!-- /ssh-pane-terminal -->
+        </div><!-- /wsl-panel-ssh -->
+
+        <!-- Montajes -->
+        <div class="wsl-subpanel" id="wsl-panel-mounts" style="display:none">
+          <div class="wsl-subpanel-header">
+            <span>💿 Montajes — <span id="wsl-mounts-distro-name"></span></span>
+            <button class="btn btn-sm" onclick="wslRefreshMounts()">↺ Refrescar</button>
+            <button class="btn-close-panel" onclick="wslHidePanel()">✕</button>
+          </div>
+          <div class="wsl-mounts-table-wrap scroll-area" style="max-height:180px">
+            <table class="wsl-table" id="wsl-mounts-table">
+              <thead><tr><th>Dispositivo</th><th>Punto de montaje</th><th>Tipo</th><th>Opciones</th></tr></thead>
+              <tbody id="wsl-mounts-tbody"><tr><td colspan="4" class="wsl-empty">Cargando…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="wsl-mount-form">
+            <div class="form-row">
+              <label>Carpeta Windows:</label>
+              <input id="wsl-bind-src" class="form-input" placeholder="C:\ruta\carpeta" readonly style="flex:1">
+              <button class="btn btn-sm" onclick="wslPickBindSrc()">…</button>
+            </div>
+            <div class="form-row">
+              <label>Punto de montaje WSL:</label>
+              <input id="wsl-bind-dst" class="form-input" value="/mnt/datos" style="flex:1">
+            </div>
+            <button class="btn btn-sm" onclick="wslBindMount()">🔗 Crear bind-mount</button>
+          </div>
+          <div class="wsl-disks-section">
+            <div class="wsl-action-section-title" style="margin-top:8px">Discos físicos (wsl --mount)</div>
+            <button class="btn btn-sm" onclick="wslListDisks()">📋 Listar discos</button>
+            <div id="wsl-disks-list" class="wsl-disk-list"></div>
+          </div>
+          <div id="wsl-mounts-log" class="wsl-log-mini"></div>
+        </div>
+
+        <!-- Transferir -->
+        <div class="wsl-subpanel" id="wsl-panel-transfer" style="display:none">
+          <div class="wsl-subpanel-header">
+            <span>📤 Transferir archivos — <span id="wsl-transfer-distro-name"></span></span>
+            <button class="btn-close-panel" onclick="wslHidePanel()">✕</button>
+          </div>
+
+
+          <div class="wsl-transfer-top">
+            <button class="btn btn-sm" onclick="wslTransferOpenExplorer()">📁 Abrir en Explorador</button>
+            <button class="btn btn-sm" onclick="wslTransferOpenHome()">🏠 Abrir HOME</button>
+          </div>
+          <div class="wsl-transfer-list-wrap">
+            <div class="wsl-transfer-list-header">
+              <span>Archivos / carpetas a copiar</span>
+              <div>
+                <button class="btn btn-sm" onclick="wslTransferAddFiles()">+ Archivos</button>
+                <button class="btn btn-sm" onclick="wslTransferAddFolder()">+ Carpeta</button>
+                <button class="btn btn-sm btn-danger" onclick="wslTransferClear()">Limpiar</button>
+              </div>
+            </div>
+            <div class="scroll-area" style="max-height:120px">
+              <ul id="wsl-transfer-list" class="wsl-file-list"></ul>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:8px">
+            <label>Destino WSL:</label>
+            <input id="wsl-transfer-dst" class="form-input" value="/root/desde_windows" style="flex:1">
+            <button class="btn btn-sm btn-primary" onclick="wslDoTransfer()">📤 Copiar</button>
+          </div>
+          <div id="wsl-transfer-log" class="wsl-log-mini"></div>
+        </div>
+      </div>
+
+      <!-- Log general WSL -->
+      <div class="wsl-log-wrap">
+        <div class="wsl-log-header">
+          <span>Salida / Log</span>
+          <button class="btn btn-sm" onclick="wslClearLog()">Limpiar</button>
+        </div>
+        <div id="wsl-log" class="wsl-log-area"></div>
+      </div>
+
+      <!-- Diálogo importar distro -->
+      <div class="modal-overlay" id="wsl-import-modal" style="display:none">
+        <div class="modal-box" style="width:480px">
+          <div class="modal-header">Importar distribución WSL
+            <button class="btn-close-panel" onclick="wslCloseImportModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Archivo .tar / .vhdx</label>
+              <div class="form-row">
+                <input id="wsl-import-src" class="form-input" readonly placeholder="Selecciona…" style="flex:1">
+                <button class="btn btn-sm" onclick="wslPickImportSrc()">…</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Nombre de la nueva distribución</label>
+              <input id="wsl-import-name" class="form-input" placeholder="MiDistro" value="MiDistroImportada">
+            </div>
+            <div class="form-group">
+              <label>Carpeta de instalación</label>
+              <div class="form-row">
+                <input id="wsl-import-dir" class="form-input" readonly placeholder="Selecciona carpeta…" style="flex:1">
+                <button class="btn btn-sm" onclick="wslPickImportDir()">…</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-sm btn-danger" onclick="wslCloseImportModal()">Cancelar</button>
+            <button class="btn btn-sm btn-primary" onclick="wslDoImport()">📥 Importar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings ──────────────────────────────────────────────── -->
+    <div id="tab-settings" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">Configuración</h1>
+      </div>
+      <div class="scroll-area">
+        <div style="max-width:640px;padding-top:8px">
+
+          <!-- Preferencias -->
+          <div class="transfer-card" style="margin-bottom:14px">
+            <div class="transfer-card-title" style="font-size:13px;margin-bottom:12px">
+              ⚙️ Preferencias
+            </div>
+            <div class="form-group">
+              <label class="form-label">Auto-refresh cada (segundos)</label>
+              <input class="form-input" id="cfg-refresh" type="number" value="15" style="width:80px">
+            </div>
+            <div class="form-check">
+              <input type="checkbox" id="cfg-autorefresh" checked>
+              <label for="cfg-autorefresh">Auto-refresh activo</label>
+            </div>
+            <button class="btn primary" style="margin-top:12px" onclick="saveSettings()">
+              💾 Guardar
+            </button>
+          </div>
+
+          <!-- Limpieza -->
+          <div class="transfer-card" style="margin-bottom:14px">
+            <div class="transfer-card-title" style="font-size:13px;margin-bottom:8px">
+              🧹 Limpieza del sistema
+            </div>
+            <p style="font-size:12px;color:var(--text-2);margin-bottom:14px">
+              Liberar espacio en disco eliminando recursos no utilizados.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn yellow" onclick="pruneImages()">🖼️ Imágenes no usadas</button>
+              <button class="btn yellow" onclick="pruneContainers()">🐳 Contenedores parados</button>
+              <button class="btn yellow" onclick="pruneVolumes()">💾 Volúmenes huérfanos</button>
+              <button class="btn red"    onclick="pruneAll()">⚠️ Limpiar todo</button>
+            </div>
+            <div id="prune-output" style="margin-top:10px;font-size:11px;color:var(--green);display:none"></div>
+          </div>
+
+          <!-- ══ Información y dependencias ══ -->
+          <div class="transfer-card" id="deps-card">
+            <div class="transfer-card-title" style="font-size:13px;margin-bottom:12px">
+              📦 Versiones y dependencias
+            </div>
+
+            <!-- Info del sistema -->
+            <div id="app-version-info" class="deps-info-grid">
+              <span class="deps-info-loading">Cargando versiones…</span>
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;margin:14px 0 10px">
+              <button class="btn blue" onclick="checkDependencyUpdates()">
+                🔍 Buscar actualizaciones
+              </button>
+              <span id="deps-check-status" style="font-size:12px;color:var(--text-2)"></span>
+            </div>
+
+            <!-- Tabla de paquetes -->
+            <div id="deps-table-wrap" style="display:none">
+              <table class="deps-table" id="deps-table">
+                <thead>
+                  <tr>
+                    <th>Paquete</th>
+                    <th>Actual</th>
+                    <th>Disponible</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="deps-table-body"></tbody>
+              </table>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn primary" id="deps-update-all-btn" onclick="updateAllDependencies()">
+                  ⬆️ Actualizar todos
+                </button>
+                <span id="deps-update-status" style="font-size:12px;color:var(--text-2)"></span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Remoto & Nube ─────────────────────────────────────────── -->
+    <div id="tab-remote" class="tab-content hidden">
+      <div class="main-header">
+        <h1 class="main-title">Remoto &amp; Nube</h1>
+        <span class="main-count text-muted">Conexión SSH · Transferencia por red · Azure · AWS · Huawei · VPS</span>
+        <div class="topbar-spacer"></div>
+        <span id="remote-status-badge" class="badge-docker">⚫ Local</span>
+      </div>
+      <div class="scroll-area">
+        <div class="remote-grid">
+
+          <!-- ═══ CONEXIÓN REMOTA ═══ -->
+          <div class="transfer-card">
+            <div class="transfer-card-title">🔌 Conexión Docker Remoto</div>
+            <p class="transfer-card-desc">
+              Conéctate a un Docker Engine en otro servidor. Una vez conectado,
+              todos los contenedores, imágenes y volúmenes mostrados serán del servidor remoto.
+            </p>
+
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <label class="form-label">Protocolo de conexión</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <label class="radio-opt">
+                    <input type="radio" name="remote-proto" value="ssh" checked> SSH (recomendado)
+                  </label>
+                  <label class="radio-opt">
+                    <input type="radio" name="remote-proto" value="tcp"> TCP (2376 TLS)
+                  </label>
+                  <label class="radio-opt">
+                    <input type="radio" name="remote-proto" value="tcp-nontls"> TCP sin TLS (2375)
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <label class="form-label">Dirección del servidor</label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                  <input class="form-input" id="remote-host" placeholder="192.168.1.100  o  mi-servidor.com" style="flex:2">
+                  <input class="form-input" id="remote-user" placeholder="usuario (SSH)" style="flex:1">
+                </div>
+                <div style="font-size:11px;color:var(--text-3)">
+                  SSH: requiere clave SSH sin contraseña (o ssh-agent). TCP: requiere puerto 2376 abierto.
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <div style="display:flex;gap:8px">
+                  <button class="btn blue" onclick="connectRemote()">🔗 Conectar</button>
+                  <button class="btn" onclick="disconnectRemote()">✕ Desconectar</button>
+                  <button class="btn" onclick="testRemote()">⚡ Probar conexión</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="console-wrap" id="remote-console-wrap" style="display:none;margin-top:10px">
+              <div class="console-header"><span>Estado de conexión</span></div>
+              <div class="console-body" id="remote-output" style="height:80px"></div>
+            </div>
+          </div>
+
+          <!-- ═══ TRANSFERENCIA POR RED ═══ -->
+          <div class="transfer-card">
+            <div class="transfer-card-title">📡 Transferir Bundle por Red</div>
+            <p class="transfer-card-desc">
+              Envía el bundle (<code>.tar.gz</code>) directamente a un servidor remoto
+              vía SCP/SSH o FTP sin necesidad de USB ni almacenamiento externo.
+            </p>
+
+            <div class="step">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <label class="form-label">Bundle a transferir</label>
+                <div class="form-input-row">
+                  <input class="form-input" id="scp-bundle" placeholder="Ruta al .tar.gz local…">
+                  <button class="btn" onclick="browseScpBundle()">📂</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <label class="form-label">Servidor destino</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div>
+                    <div class="form-label" style="margin-bottom:3px">Host / IP</div>
+                    <input class="form-input" id="scp-host" placeholder="192.168.1.50">
+                  </div>
+                  <div>
+                    <div class="form-label" style="margin-bottom:3px">Usuario SSH</div>
+                    <input class="form-input" id="scp-user" placeholder="deploy">
+                  </div>
+                  <div>
+                    <div class="form-label" style="margin-bottom:3px">Puerto SSH</div>
+                    <input class="form-input" id="scp-port" type="number" value="22" style="width:80px">
+                  </div>
+                  <div>
+                    <div class="form-label" style="margin-bottom:3px">Ruta destino</div>
+                                        <input class="form-input" id="scp-remote-path" placeholder="/home/deploy/bundles">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <label class="form-label">Enviar por SCP</label>
+                <div style="display:flex;gap:8px">
+                  <button class="btn primary" onclick="runScp()">📡 Enviar por SCP</button>
+                  <button class="btn" onclick="showFtpHelp()">📋 Instrucciones FTP</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="console-wrap" id="scp-console-wrap" style="display:none">
+              <div class="console-header">
+                <span>⬛ SCP Transfer</span>
+                <span class="topbar-spacer"></span>
+                <button class="btn-icon" onclick="killScp()" id="scp-kill-btn">⏹ Detener</button>
+                <button class="btn-icon" onclick="clearConsole('scp-output')">🗑</button>
+              </div>
+              <div class="console-body" id="scp-output"></div>
+            </div>
+          </div>
+
+          <!-- ═══ CLOUD PUSH ═══ -->
+          <div class="transfer-card">
+            <div class="transfer-card-title">☁️ Subir imagen al Cloud Registry</div>
+            <p class="transfer-card-desc">
+              Publica imágenes Docker en DockerHub, Azure ACR, AWS ECR, Huawei SWR o tu propio registry privado.
+            </p>
+
+            <!-- Selector de proveedor -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+              <button class="cloud-btn dockerhub" onclick="selectCloud('dockerhub')">🐳 DockerHub</button>
+              <button class="cloud-btn azure"     onclick="selectCloud('azure')">☁️ Azure ACR</button>
+              <button class="cloud-btn aws"       onclick="selectCloud('aws')">🟡 AWS ECR</button>
+              <button class="cloud-btn huawei"    onclick="selectCloud('huawei')">🔴 Huawei SWR</button>
+              <button class="cloud-btn vps"       onclick="selectCloud('vps')">🖥 VPS Registry</button>
+            </div>
+
+            <!-- Config por proveedor -->
+            <div id="cloud-config" style="display:none">
+              <div class="transfer-card-title" style="font-size:12px;margin-bottom:10px">
+                🔑 Credenciales — <span id="cloud-provider-label"></span>
+                <span id="cloud-auth-badge" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px"></span>
+              </div>
+
+              <!-- DockerHub -->
+              <div id="auth-fields-dockerhub" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Usuario Docker Hub</label>
+                  <input class="form-input" id="dh-user" placeholder="mi_usuario">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Access Token (recomendado) o Password</label>
+                  <input class="form-input" id="dh-token" type="password" placeholder="dckr_pat_…">
+                </div>
+              </div>
+
+              <!-- Azure ACR -->
+              <div id="auth-fields-azure" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Registry URL</label>
+                  <input class="form-input" id="azure-registry" placeholder="miregistry.azurecr.io"
+                         oninput="syncRegistryHost(this.value)">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Username (Service Principal o "00000000-0000-0000-0000-000000000000")</label>
+                  <input class="form-input" id="azure-user" placeholder="SP App ID">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Password / Secret</label>
+                  <input class="form-input" id="azure-pass" type="password">
+                </div>
+              </div>
+
+              <!-- AWS ECR -->
+              <div id="auth-fields-aws" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Account ID</label>
+                  <input class="form-input" id="aws-account-id" placeholder="123456789012">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Región</label>
+                  <input class="form-input" id="aws-region-id" placeholder="us-east-1">
+                </div>
+                <p style="font-size:11px;color:var(--text-3);margin:4px 0 8px">
+                  Opcional: configura <code>AWS_ACCESS_KEY_ID</code> y <code>AWS_SECRET_ACCESS_KEY</code>
+                  como variables de entorno, o usa <code>aws configure</code>.
+                </p>
+                <div class="form-group">
+                  <label class="form-label">Access Key ID (opcional)</label>
+                  <input class="form-input" id="aws-key-id" placeholder="AKIAIOSFODNN7EXAMPLE">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Secret Access Key (opcional)</label>
+                  <input class="form-input" id="aws-secret" type="password">
+                </div>
+              </div>
+
+              <!-- Huawei SWR -->
+              <div id="auth-fields-huawei" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Región</label>
+                  <input class="form-input" id="hw-region" placeholder="la-south-2"
+                         oninput="syncHuaweiRegistry()">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Account (dominio IAM)</label>
+                  <input class="form-input" id="hw-account" placeholder="mi_empresa"
+                         oninput="syncHuaweiRegistry()">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Username IAM</label>
+                  <input class="form-input" id="hw-user" placeholder="usuario_iam">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">AK (Access Key)</label>
+                  <input class="form-input" id="hw-ak" placeholder="AK…">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">SK (Secret Key)</label>
+                  <input class="form-input" id="hw-sk" type="password">
+                </div>
+              </div>
+
+              <!-- VPS / Registry privado -->
+              <div id="auth-fields-vps" style="display:none">
+                <div class="form-group">
+                  <label class="form-label">Host del registry</label>
+                  <div style="display:flex;gap:8px">
+                    <input class="form-input" id="vps-host-auth" placeholder="192.168.1.100" style="flex:2"
+                           oninput="syncRegistryFromVps()">
+                    <input class="form-input" id="vps-port-auth" placeholder="5000" style="width:80px"
+                           oninput="syncRegistryFromVps()">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Usuario (si requiere auth)</label>
+                  <input class="form-input" id="vps-user-auth" placeholder="admin">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Password</label>
+                  <input class="form-input" id="vps-pass-auth" type="password">
+                </div>
+              </div>
+
+              <!-- Campos comunes -->
+              <div class="form-group" style="margin-top:8px">
+                <label class="form-label">Registry URL (auto-completado)</label>
+                <input class="form-input" id="cloud-registry" placeholder="registry.hub.docker.com" readonly style="font-size:11px;color:var(--text-3)">
+              </div>
+              <div style="display:flex;gap:8px">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">Región / Zona</label>
+                  <input class="form-input" id="cloud-region" placeholder="(auto)">
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="form-label">Account / Namespace</label>
+                  <input class="form-input" id="cloud-account" placeholder="(auto)">
+                </div>
+              </div>
+
+              <div style="display:flex;gap:8px;align-items:center;margin:10px 0">
+                <button class="btn blue" onclick="connectCloudRegistry()">🔗 Conectar y listar repos</button>
+                <button class="btn" id="cloud-disconnect-btn" style="display:none" onclick="disconnectCloud()">✕ Desconectar</button>
+                <span id="cloud-auth-status" style="font-size:12px;color:var(--text-2)"></span>
+              </div>
+
+              <!-- Explorador de repositorios -->
+              <div id="cloud-explorer" style="display:none;margin-top:10px;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+                <div style="background:var(--bg-2);padding:8px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px">
+                  <span>📦 Repositorios del registry</span>
+                  <span id="cloud-explorer-count" style="font-size:11px;color:var(--text-3)"></span>
+                  <span class="topbar-spacer"></span>
+                  <button class="btn btn-sm" onclick="refreshCloudExplorer()">↺</button>
+                </div>
+                <div id="cloud-explorer-tree" style="max-height:200px;overflow-y:auto;padding:6px 0"></div>
+              </div>
+
+              <!-- Selector de imagen y push -->
+              <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+                <div class="transfer-card-title" style="font-size:12px;margin-bottom:8px">🚀 Subir imagen</div>
+                <div id="cloud-proj-filter" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <select class="form-input" id="cloud-image" style="flex:1;min-width:150px">
+                    <option value="">— Selecciona imagen —</option>
+                  </select>
+                  <input class="form-input" id="cloud-tag" placeholder="latest" style="width:90px">
+                  <input class="form-input" id="cloud-repo-name" placeholder="mi-app" style="width:110px">
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px">
+                  <button class="btn primary" onclick="runCloudPush()">☁️ Push al registry</button>
+                  <button class="btn" onclick="addToCloudQueue()">+ Cola</button>
+                </div>
+                <div id="cloud-queue-wrap" style="display:none;margin-top:8px">
+                  <div style="font-size:12px;color:var(--text-2);margin-bottom:4px">Cola de push</div>
+                  <div id="cloud-queue-list"></div>
+                  <button class="btn blue" style="margin-top:6px" onclick="runCloudQueue()">▶ Ejecutar cola</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="console-wrap" id="cloud-console-wrap" style="display:none;margin-top:10px">
+              <div class="console-header">
+                <span>⬛ Cloud Push</span>
+                <span class="topbar-spacer"></span>
+                <button class="btn-icon" onclick="killCloudPush()" id="cloud-kill-btn">⏹ Detener</button>
+                <button class="btn-icon" onclick="clearConsole('cloud-output')">🗑</button>
+              </div>
+              <div class="console-body" id="cloud-output"></div>
+            </div>
+          </div>
+
+        </div><!-- /remote-grid -->
+      </div>
+    </div><!-- /tab-remote -->
+
+  </main>
+</div><!-- /.app-layout -->
+
+<!-- ══ MENÚ CONTEXTUAL ═══════════════════════════════════════════════════ -->
+<div id="ctx-menu" class="context-menu hidden">
+  <div class="ctx-item" data-action="start">▶ Iniciar</div>
+  <div class="ctx-item" data-action="stop">⏹ Detener</div>
+  <div class="ctx-item" data-action="restart">↺ Reiniciar</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-action="logs">📋 Ver logs</div>
+  <div class="ctx-item" data-action="explore">🗂 Explorar archivos</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item ctx-danger" data-action="remove">🗑 Eliminar</div>
+</div>
+
+<!-- ══ MODAL INFO ══════════════════════════════════════════════════════════ -->
+<div id="info-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeInfoModal()">
+  <div class="modal-box" style="width:540px;max-height:80vh;overflow-y:auto">
+    <div class="modal-header">
+      <span id="info-modal-title">Información</span>
+      <button class="btn-close-panel" onclick="closeInfoModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre id="info-modal-body" style="white-space:pre-wrap;word-break:break-all;font-size:12px;color:var(--text-1)"></pre>
+    </div>
+  </div>
+</div>
+
+
+
+
+<!-- ══ WSL EXPORT RESULT MODAL ═══════════════════════════════════════════ -->
+<div id="wsl-export-result-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)wslExportResultClose()">
+  <div class="modal-box" style="width:500px">
+    <div class="modal-header">
+      <span id="wsl-er-title">✅ Exportación completada</span>
+      <button class="btn-close-panel" onclick="wslExportResultClose()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div class="wsl-er-row">
+        <span class="wsl-er-label">Distro</span>
+        <span class="wsl-er-value" id="wsl-er-distro"></span>
+      </div>
+      <div class="wsl-er-row">
+        <span class="wsl-er-label">Archivo</span>
+        <code class="wsl-er-path" id="wsl-er-path" title="Haz clic para copiar" onclick="wslErCopyPath()"></code>
+      </div>
+      <div class="wsl-er-row">
+        <span class="wsl-er-label">Tamaño</span>
+        <span class="wsl-er-value" id="wsl-er-size">calculando…</span>
+      </div>
+      <div class="wsl-er-hint" id="wsl-er-hint">
+        💡 Para importar en otro equipo:<br>
+        <code>wsl --import NombreNuevo C:
+uta\destino archivo.tar</code>
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border)">
+      <button class="btn btn-sm" onclick="wslErCopyPath()">📋 Copiar ruta</button>
+      <button class="btn btn-sm btn-primary" onclick="wslErOpenFolder()">📂 Abrir carpeta</button>
+      <button class="btn btn-sm" onclick="wslExportResultClose()">Cerrar</button>
+    </div>
+  </div>
+</div>
+<!-- ══ WSL NETWORK EXPORT MODAL ══════════════════════════════════════════ -->
+<div id="wsl-netexport-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)wslNetExportClose()">
+  <div class="modal-box" style="width:480px">
+    <div class="modal-header">
+      <span>🌐 Exportar por Red / Ruta</span>
+      <button class="btn-close-panel" onclick="wslNetExportClose()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <p style="color:var(--text-2);font-size:12px;margin:0">
+        Exporta la distro WSL como <code>.tar</code> directamente a una ruta UNC (red SMB) o a cualquier unidad accesible.
+      </p>
+      <div class="form-row">
+        <label class="form-label">Distro</label>
+        <input id="wsl-ne-distro" class="form-input" readonly style="opacity:.7">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Destino</label>
+        <input id="wsl-ne-dest" class="form-input" placeholder="\\servidor\carpeta  o  D:\Backups\WSL">
+      </div>
+      <p style="color:var(--text-2);font-size:11px;margin:0">
+        El archivo se guardará como <code>{distro}_{fecha}.tar</code> en la carpeta indicada.<br>
+        Para importar en otro equipo: <code>wsl --import NombreNuevo C:
+uta archivo.tar</code>
+      </p>
+      <div id="wsl-ne-result" style="display:none;padding:8px;border-radius:6px;font-size:12px"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--border)">
+      <button class="btn btn-sm" onclick="wslNetExportClose()">Cancelar</button>
+      <button class="btn btn-sm btn-primary" id="wsl-ne-btn" onclick="wslDoNetExport()">🚀 Exportar</button>
+    </div>
+  </div>
+</div>
+<!-- ══ WSL RECURSOS MONITOR ══════════════════════════════════════════════ -->
+<div id="wsl-res-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)wslResClose()">
+  <div class="wsl-res-box" id="wsl-res-box">
+    <div class="wsl-res-header">
+      <span class="wsl-res-title">📊 Monitor de Recursos — <strong id="wsl-res-distro-name"></strong></span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span id="wsl-res-refresh-badge" class="wsl-res-badge">↻ Auto</span>
+        <button class="btn-close-panel" onclick="wslResClose()">✕</button>
+      </div>
+    </div>
+    <div class="wsl-res-body" id="wsl-res-body">
+      <!-- CPU -->
+      <div class="wsl-res-section">
+        <div class="wsl-res-sec-title">⚡ CPU</div>
+        <div class="wsl-res-row">
+          <span class="wsl-res-lbl" id="wsl-res-cpu-lbl">—</span>
+          <div class="wsl-res-bar-wrap"><div class="wsl-res-bar" id="wsl-res-cpu-bar" style="width:0%"></div></div>
+          <span class="wsl-res-pct" id="wsl-res-cpu-pct">—</span>
+        </div>
+        <div class="wsl-res-procs" id="wsl-res-procs"></div>
+      </div>
+      <!-- RAM -->
+      <div class="wsl-res-section">
+        <div class="wsl-res-sec-title">🧠 Memoria RAM</div>
+        <div class="wsl-res-row">
+          <span class="wsl-res-lbl">RAM</span>
+          <div class="wsl-res-bar-wrap"><div class="wsl-res-bar wsl-res-bar-mem" id="wsl-res-ram-bar" style="width:0%"></div></div>
+          <span class="wsl-res-pct" id="wsl-res-ram-pct">—</span>
+        </div>
+        <div class="wsl-res-row">
+          <span class="wsl-res-lbl">Swap</span>
+          <div class="wsl-res-bar-wrap"><div class="wsl-res-bar wsl-res-bar-swap" id="wsl-res-swap-bar" style="width:0%"></div></div>
+          <span class="wsl-res-pct" id="wsl-res-swap-pct">—</span>
+        </div>
+        <div class="wsl-res-mem-detail" id="wsl-res-mem-detail"></div>
+      </div>
+      <!-- DISCO -->
+      <div class="wsl-res-section">
+        <div class="wsl-res-sec-title">💾 Disco</div>
+        <div id="wsl-res-disk"></div>
+      </div>
+      <!-- PUERTOS -->
+      <div class="wsl-res-section" id="wsl-res-ports-section" style="display:none">
+        <div class="wsl-res-sec-title">🔌 Servicios / Puertos</div>
+        <pre class="wsl-res-ports-pre" id="wsl-res-ports-pre"></pre>
+      </div>
+    </div>
+    <div class="wsl-res-footer">
+      <span id="wsl-res-last-update" style="color:var(--text-2);font-size:11px">—</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="wslResRefresh()">↻ Actualizar</button>
+        <button class="btn btn-sm" onclick="wslResToggleAuto()">⏸ Pausar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ══ EXPLORADOR DE CONTENEDORES ══════════════════════════════════════════ -->
+<div id="explorer-modal" class="explorer-window" style="display:none">
+  <div class="explorer-titlebar" id="explorer-drag-handle">
+    <span class="explorer-titlebar-icon">🗂</span>
+    <span class="explorer-titlebar-title">Explorador — <strong id="explorer-container-name"></strong></span>
+    <div class="explorer-titlebar-actions">
+      <button class="btn btn-sm" onclick="explorerOpenTerminal()" title="Abrir terminal">🖥 Terminal</button>
+      <button class="btn btn-sm" onclick="explorerShowRename()" title="Renombrar contenedor">✏️ Renombrar</button>
+      <button class="explorer-win-btn" onclick="explorerToggleMaximize()" title="Maximizar/restaurar">⬜</button>
+      <button class="explorer-win-btn danger" onclick="closeExplorer()" title="Cerrar">✕</button>
+    </div>
+  </div>
+
+  <!-- Pestañas del explorador -->
+  <div class="explorer-tabs">
+    <button class="explorer-tab active" id="etab-files"  onclick="switchExplorerTab('files')">📁 Archivos</button>
+    <button class="explorer-tab"        id="etab-db"     onclick="switchExplorerTab('db')">🗄 Base de datos</button>
+    <button class="explorer-tab"        id="etab-net"    onclick="switchExplorerTab('net')">🌐 Red & Puertos</button>
+  </div>
+
+    <!-- ── Panel ARCHIVOS ───────────────────────────────────────────── -->
+    <div id="explorer-panel-files" class="explorer-panel">
+      <div class="explorer-path-bar">
+        <button class="btn btn-sm" onclick="explorerGoUp()">⬆</button>
+        <span id="explorer-current-path" class="explorer-path-text">/</span>
+        <button class="btn btn-sm" onclick="explorerRefresh()">↺</button>
+        <div class="topbar-spacer"></div>
+        <button class="btn btn-sm" id="explorer-copy-btn" onclick="explorerCopyToDesktop()" style="display:none">
+          💾 Copiar al escritorio
+        </button>
+      </div>
+
+      <div id="explorer-breadcrumb" class="explorer-breadcrumb"></div>
+
+      <div class="explorer-content-area">
+        <!-- Árbol de directorios -->
+        <div class="explorer-tree-panel">
+          <div id="explorer-tree" class="explorer-tree">
+            <div class="explorer-loading"><div class="spinner"></div>Cargando…</div>
+          </div>
+        </div>
+        <!-- Detalle del archivo seleccionado -->
+        <div class="explorer-detail-panel">
+          <div id="explorer-detail" class="explorer-detail-empty">
+            <span style="color:var(--text-3);font-size:13px">Selecciona un archivo para ver su detalle</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Panel BASE DE DATOS ──────────────────────────────────────── -->
+    <div id="explorer-panel-db" class="explorer-panel" style="display:none">
+      <div class="db-detect-bar">
+        <span id="db-type-badge" class="db-badge">Sin detectar</span>
+        <button class="btn btn-sm" onclick="explorerDetectDb()">🔍 Detectar BD</button>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          <label style="font-size:11px;color:var(--text-3)">Base de datos:</label>
+          <input id="db-manual-name" type="text" class="db-cred-input"
+            placeholder="nombre o vacío para listar" style="max-width:160px"
+            title="Escribe un nombre de BD específico o déjalo vacío para listar todas">
+          <button class="btn btn-sm" onclick="explorerSwitchToNamedDb()" title="Ir a esa base de datos">→ Ir</button>
+        </div>
+      </div>
+
+      <!-- Formulario de credenciales manuales (se muestra cuando needsCredentials) -->
+      <div id="db-credentials-form" class="db-credentials-form" style="display:none">
+        <div class="db-cred-title">🔑 Credenciales de conexión</div>
+        <div class="db-cred-row">
+          <label class="db-cred-label">Usuario</label>
+          <input id="db-cred-user" class="db-cred-input" type="text" placeholder="postgres" autocomplete="off">
+        </div>
+        <div class="db-cred-row">
+          <label class="db-cred-label">Contraseña</label>
+          <input id="db-cred-pwd" class="db-cred-input" type="password" placeholder="(vacío si sin contraseña)" autocomplete="off">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm btn-primary" onclick="explorerVerifyCredentials()">🔗 Conectar</button>
+          <span id="db-cred-status" style="font-size:11px;color:var(--text-3)"></span>
+        </div>
+      </div>
+
+
+      <!-- DB layout: lista BDs | lista tablas | query -->
+      <div class="db-layout">
+
+        <!-- Columna 1: Bases de datos -->
+        <div class="db-list-panel">
+          <div class="db-panel-title">Bases de datos</div>
+          <div id="db-list" class="db-list">
+            <div style="padding:8px;font-size:12px;color:var(--text-3)">Detecta la BD primero</div>
+          </div>
+        </div>
+
+        <!-- Columna 2: Tablas / Colecciones -->
+        <div class="db-tables-panel">
+          <div class="db-panel-title" id="db-tables-title">Tablas / Colecciones</div>
+          <div id="db-tables" class="db-list">
+            <div style="padding:8px;font-size:12px;color:var(--text-3)">Selecciona una BD</div>
+          </div>
+        </div>
+
+        <!-- Columna 3: Query -->
+        <div class="db-query-panel">
+          <div class="db-panel-title">Consulta SQL / NoSQL</div>
+          <textarea id="db-query-input" class="db-query-textarea"
+            placeholder="SELECT * FROM tabla LIMIT 20;&#10;-- Haz clic en una tabla para autocompletar"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-sm btn-primary" onclick="explorerRunQuery()">&#x25B6; Ejecutar</button>
+            <button class="btn btn-sm" onclick="$id('db-query-input').value=''">&#x2715; Limpiar</button>
+          </div>
+          <pre id="db-result" class="db-result-area">(resultado aqui)</pre>
+        </div>
+
+      </div><!-- /db-layout -->
+    </div><!-- /explorer-panel-db -->
+
+    <!-- Panel RED & PUERTOS -->
+    <div id="explorer-panel-net" class="explorer-panel" style="display:none">
+      <div class="net-layout">
+
+        <!-- Redes actuales del contenedor -->
+        <div class="net-section">
+          <div class="net-section-title">Redes conectadas</div>
+          <div id="net-networks-list">
+            <div class="net-placeholder">Cargando...</div>
+          </div>
+        </div>
+
+        <!-- Puertos mapeados -->
+        <div class="net-section">
+          <div class="net-section-title">Puertos publicados (host &rarr; contenedor)</div>
+          <div id="net-ports-mapped">
+            <div class="net-placeholder">Cargando...</div>
+          </div>
+        </div>
+
+        <!-- Puertos en escucha dentro del contenedor -->
+        <div class="net-section">
+          <div class="net-section-title">Puertos en escucha (dentro del contenedor)</div>
+          <div id="net-ports-listen">
+            <div class="net-placeholder">Cargando...</div>
+          </div>
+        </div>
+
+        <!-- Gestionar redes -->
+        <div class="net-section">
+          <div class="net-section-title">Gestionar redes Docker</div>
+          <div class="net-manage-row">
+            <select id="net-select-network">
+              <option value="">Cargando redes...</option>
+            </select>
+            <input type="text" id="net-static-ip" placeholder="IP estatica (opc.)" title="Asignar IP estatica al conectar">
+            <button class="btn btn-sm btn-primary" onclick="explorerNetConnect()">&#x2714; Conectar</button>
+            <button class="btn btn-sm" onclick="explorerNetDisconnect()">&#x2715; Desconectar</button>
+            <button class="btn btn-sm" onclick="explorerRefreshNet()">&#x21BA; Recargar</button>
+          </div>
+          <div id="net-action-result" style="margin-top:6px;font-size:12px;color:var(--text-3)"></div>
+        </div>
+
+      </div><!-- /net-layout -->
+    </div><!-- /explorer-panel-net -->
+
+</div><!-- /explorer-modal -->
+
+<script src="app.js"></script>
+
+<!-- WSL right-click context menu -->
+<div id="wsl-ctx-menu" class="wsl-ctx-menu" style="display:none">
+  <div class="wsl-ctx-item" onclick="wslCtxAction('start')">▶ Iniciar</div>
+  <div class="wsl-ctx-item" onclick="wslCtxAction('terminate')">⏹ Detener</div>
+  <div class="wsl-ctx-item" onclick="wslCtxAction('restart')">↺ Reiniciar</div>
+  <div class="wsl-ctx-sep"></div>
+  <div class="wsl-ctx-item" onclick="wslCtxAction('setDefault')">★ Marcar como Default</div>
+  <div class="wsl-ctx-item" onclick="wslOpenTerminal()">🖥 Abrir Terminal</div>
+  <div class="wsl-ctx-item" onclick="wslOpenExplorer()">📁 Explorador de archivos</div>
+  <div class="wsl-ctx-sep"></div>
+  <div class="wsl-ctx-item wsl-ctx-danger" onclick="wslCtxDelete()">🗑 Eliminar distro…</div>
+</div>
+</body>
+</html>
